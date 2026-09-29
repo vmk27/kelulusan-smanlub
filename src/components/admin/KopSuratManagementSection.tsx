@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Building,
   Save,
@@ -16,6 +16,13 @@ import {
   Sliders,
   Layers,
   Image as ImageIcon,
+  Trash2,
+  RefreshCw,
+  MapPin,
+  Calendar,
+  Type,
+  FileCheck2,
+  PenTool,
 } from 'lucide-react';
 import { AnnouncementSettings, StudentRecord } from '../../types/graduation';
 import { generateGraduationCertificatePDF } from '../../utils/pdfGenerator';
@@ -43,14 +50,25 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
     kopLogoKiri: settings.kopLogoKiri || '',
     kopLogoKanan: settings.kopLogoKanan || '',
     kopBorderThickness: settings.kopBorderThickness || 'standard_double',
+    sklOpeningText:
+      settings.sklOpeningText ||
+      'Kepala [NAMA_SEKOLAH] selaku Ketua Penyelenggara Ujian Satuan Pendidikan Tahun Pelajaran [TAHUN_AJARAN], berdasarkan Kriteria Kelulusan Peserta Didik dan hasil Rapat Pleno Dewan Pendidik pada tanggal [TANGGAL_PLENO], dengan ini menerangkan bahwa:',
+    sklClosingText:
+      settings.sklClosingText ||
+      'Surat Keterangan Lulus ini bersifat resmi dan berlaku sementara sampai dengan diterbitkannya Ijazah Asli Tahun Pelajaran [TAHUN_AJARAN].',
+    sklLegalLocation: settings.sklLegalLocation || 'Ciamis',
+    principalSignature: settings.principalSignature || '',
   });
 
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [activeTab, setActiveTab] = useState<'editor' | 'preview'>('editor');
   const [previewSampleStudent, setPreviewSampleStudent] = useState<StudentRecord | null>(
     students.length > 0 ? students[0] : null
   );
+
+  const fileInputKiriRef = useRef<HTMLInputElement>(null);
+  const fileInputKananRef = useRef<HTMLInputElement>(null);
+  const fileInputTtdRef = useRef<HTMLInputElement>(null);
 
   const handleChange = (
     field: keyof AnnouncementSettings,
@@ -64,10 +82,37 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
     setSaveSuccess(false);
   };
 
+  const handleFileUpload = (
+    field: 'kopLogoKiri' | 'kopLogoKanan' | 'principalSignature',
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Ukuran berkas gambar terlalu besar (maksimum 2 MB). Silakan gunakan gambar yang lebih kecil.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      if (result) {
+        handleChange(field, result);
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleClearField = (field: 'kopLogoKiri' | 'kopLogoKanan' | 'principalSignature') => {
+    handleChange(field, '');
+  };
+
   const handleResetDefault = () => {
     if (
       window.confirm(
-        'Kembalikan pengaturan KOP Surat ke format baku resmi SMAN 1 Lumbung Provinsi Jawa Barat?'
+        'Kembalikan seluruh format KOP Surat dan redaksi kalimat SKL ke format baku resmi SMAN 1 Lumbung Provinsi Jawa Barat?'
       )
     ) {
       setFormData((prev) => ({
@@ -86,6 +131,12 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
         kopLogoKiri: '',
         kopLogoKanan: '',
         kopBorderThickness: 'standard_double',
+        sklOpeningText:
+          'Kepala [NAMA_SEKOLAH] selaku Ketua Penyelenggara Ujian Satuan Pendidikan Tahun Pelajaran [TAHUN_AJARAN], berdasarkan Kriteria Kelulusan Peserta Didik dan hasil Rapat Pleno Dewan Pendidik pada tanggal [TANGGAL_PLENO], dengan ini menerangkan bahwa:',
+        sklClosingText:
+          'Surat Keterangan Lulus ini bersifat resmi dan berlaku sementara sampai dengan diterbitkannya Ijazah Asli Tahun Pelajaran [TAHUN_AJARAN].',
+        sklLegalLocation: 'Ciamis',
+        principalSignature: '',
         updatedAt: new Date().toISOString(),
       }));
     }
@@ -97,7 +148,7 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
     try {
       await onSaveSettings(formData);
       setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3500);
+      setTimeout(() => setSaveSuccess(false), 4000);
     } catch (err) {
       alert('Gagal menyimpan pengaturan KOP Surat: ' + (err as Error).message);
     } finally {
@@ -137,6 +188,16 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
     generateGraduationCertificatePDF(dummyStudent, formData);
   };
 
+  const resolvedOpeningText = (formData.sklOpeningText || '')
+    .replace(/\[NAMA_SEKOLAH\]/g, formData.schoolName || 'SMAN 1 Lumbung Ciamis')
+    .replace(/\[TAHUN_AJARAN\]/g, formData.academicYear || '2025/2026')
+    .replace(/\[TANGGAL_PLENO\]/g, formData.plenoDate || '4 Mei 2026');
+
+  const resolvedClosingText = (formData.sklClosingText || '')
+    .replace(/\[NAMA_SEKOLAH\]/g, formData.schoolName || 'SMAN 1 Lumbung Ciamis')
+    .replace(/\[TAHUN_AJARAN\]/g, formData.academicYear || '2025/2026')
+    .replace(/\[TANGGAL_PLENO\]/g, formData.plenoDate || '4 Mei 2026');
+
   return (
     <div className="space-y-6">
       {/* Header Banner */}
@@ -148,10 +209,10 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
             </span>
             <div>
               <h3 className="text-base sm:text-lg font-bold text-palette-text">
-                Pengaturan Format KOP Surat Resmi
+                Pengaturan Format KOP & Redaksi Kalimat SKL
               </h3>
               <p className="text-xs text-palette-text/70">
-                Konfigurasi tata letak kop surat, logo instansi, identitas dinas pendidikan, serta informasi kontak resmi untuk dokumen Surat Keterangan Lulus (SKL) Digital.
+                Kelola identitas dinas, unggah logo sekolah & dinas, atur tanda tangan kepala sekolah, dan sesuaikan redaksi kalimat pengesahan SKL Digital.
               </p>
             </div>
           </div>
@@ -173,7 +234,7 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
             type="button"
             onClick={handleTestPrintPdf}
             className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-palette-primary bg-palette-accent/70 hover:bg-palette-accent rounded-lg transition-colors cursor-pointer"
-            title="Unduh contoh PDF SKL dengan KOP saat ini"
+            title="Unduh contoh PDF SKL dengan KOP, kalimat, dan tanda tangan saat ini"
           >
             <Printer className="w-3.5 h-3.5" />
             <span>Test Unduh PDF</span>
@@ -186,7 +247,7 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-palette-primary hover:bg-palette-text rounded-lg transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
           >
             <Save className="w-3.5 h-3.5" />
-            <span>{isSaving ? 'Menyimpan...' : 'Simpan KOP'}</span>
+            <span>{isSaving ? 'Menyimpan...' : 'Simpan KOP & SKL'}</span>
           </button>
         </div>
       </div>
@@ -196,13 +257,13 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>
-              Pengaturan KOP Surat berhasil diperbarui dan diselaraskan ke sistem cetak SKL Digital.
+              Pengaturan KOP Surat, Logo, Tanda Tangan, dan Redaksi Kalimat SKL berhasil diperbarui dan diterapkan ke seluruh sistem cetak.
             </span>
           </div>
         </div>
       )}
 
-      {/* Main Content Grid: Left Form Controls, Right Live Visual Preview */}
+      {/* Main Content Grid: Left Form Controls (7 cols), Right Live Visual Preview (5 cols) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Form Fields (7 cols) */}
         <div className="lg:col-span-7 space-y-5">
@@ -214,7 +275,7 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
                   <Sliders className="w-4 h-4" />
                   1. Identitas Hierarki Lembaga & Dinas
                 </span>
-                <span className="text-[11px] text-palette-text/60">Teks Kepala Surat</span>
+                <span className="text-[11px] text-palette-text/60">Kepala Surat</span>
               </div>
 
               <div className="space-y-3.5">
@@ -373,53 +434,169 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
               </div>
             </div>
 
-            {/* Box 3: Logo & Gaya Garis Pembatas KOP */}
+            {/* Box 3: Upload Logo Dinas & Logo Sekolah + Garis Pembatas */}
             <div className="bg-white border border-palette-accent rounded-xl p-5 space-y-4">
               <div className="flex items-center justify-between pb-2 border-b border-palette-accent">
                 <span className="text-xs font-bold uppercase tracking-wider text-palette-primary font-mono flex items-center gap-1.5">
                   <ImageIcon className="w-4 h-4" />
-                  3. Logo & Garis Pembatas KOP
+                  3. Upload Logo Dinas & Logo Sekolah
                 </span>
-                <span className="text-[11px] text-palette-text/60">Dekorasi Resmi</span>
+                <span className="text-[11px] text-palette-text/60">Logo Resmi & Garis</span>
               </div>
 
+              {/* Hidden file inputs */}
+              <input
+                ref={fileInputKiriRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handleFileUpload('kopLogoKiri', e)}
+              />
+              <input
+                ref={fileInputKananRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handleFileUpload('kopLogoKanan', e)}
+              />
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="p-3.5 rounded-lg border border-palette-accent bg-palette-background space-y-2">
+                {/* Logo Kiri Card */}
+                <div className="p-4 rounded-xl border border-palette-accent bg-palette-background space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-palette-text">
-                      Logo Kiri (Pemda / Pemprov)
+                    <label className="text-xs font-bold text-palette-text">
+                      Logo Kiri (Dinas / Pemda)
                     </label>
-                    <span className="text-[10px] text-palette-text/60 font-mono">Opsional</span>
+                    {formData.kopLogoKiri && (
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-mono font-semibold">
+                        Kustom Aktif
+                      </span>
+                    )}
                   </div>
-                  <input
-                    type="text"
-                    value={formData.kopLogoKiri || ''}
-                    onChange={(e) => handleChange('kopLogoKiri', e.target.value)}
-                    placeholder="URL gambar (HTTPS) atau biarkan kosong untuk vektor bawaan"
-                    className="w-full px-3 py-1.5 text-xs border border-palette-accent rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-palette-primary"
-                  />
-                  <p className="text-[10px] text-palette-text/60">
-                    Bila dikosongkan, sistem menampilkan lambang resmi Pemprov Jawa Barat.
-                  </p>
+
+                  <div className="flex items-center gap-3">
+                    <div className="w-16 h-16 rounded-lg border border-palette-accent bg-white flex items-center justify-center p-1.5 shrink-0 overflow-hidden shadow-2xs">
+                      {formData.kopLogoKiri ? (
+                        <img
+                          src={formData.kopLogoKiri}
+                          alt="Logo Dinas"
+                          className="max-h-full max-w-full object-contain"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full border border-amber-300 bg-amber-50 flex items-center justify-center text-center">
+                          <span className="text-[9px] font-bold text-amber-900 font-mono">
+                            JABAR
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 space-y-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => fileInputKiriRef.current?.click()}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-palette-primary hover:bg-palette-text rounded-md transition-colors cursor-pointer"
+                        >
+                          <Upload className="w-3 h-3" />
+                          <span>Unggah Logo</span>
+                        </button>
+                        {formData.kopLogoKiri && (
+                          <button
+                            type="button"
+                            onClick={() => handleClearField('kopLogoKiri')}
+                            className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 rounded-md border border-rose-200 transition-colors cursor-pointer"
+                            title="Hapus logo kustom & gunakan logo bawaan"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Hapus</span>
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-palette-text/60 leading-tight">
+                        PNG, JPG, SVG, WebP (maks. 2 MB). Bila kosong, lambang Pemprov Jawa Barat akan dipakai.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <input
+                      type="text"
+                      value={formData.kopLogoKiri?.startsWith('data:') ? '' : formData.kopLogoKiri || ''}
+                      onChange={(e) => handleChange('kopLogoKiri', e.target.value)}
+                      placeholder="Atau tautan URL gambar (https://...)"
+                      className="w-full px-2.5 py-1.5 text-[11px] border border-palette-accent rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-palette-primary text-palette-text"
+                    />
+                  </div>
                 </div>
 
-                <div className="p-3.5 rounded-lg border border-palette-accent bg-palette-background space-y-2">
+                {/* Logo Kanan Card */}
+                <div className="p-4 rounded-xl border border-palette-accent bg-palette-background space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-palette-text">
-                      Logo Kanan (Tut Wuri / Sekolah)
+                    <label className="text-xs font-bold text-palette-text">
+                      Logo Kanan (Sekolah / Tut Wuri)
                     </label>
-                    <span className="text-[10px] text-palette-text/60 font-mono">Opsional</span>
+                    {formData.kopLogoKanan && (
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-mono font-semibold">
+                        Kustom Aktif
+                      </span>
+                    )}
                   </div>
-                  <input
-                    type="text"
-                    value={formData.kopLogoKanan || ''}
-                    onChange={(e) => handleChange('kopLogoKanan', e.target.value)}
-                    placeholder="URL gambar (HTTPS) atau biarkan kosong untuk vektor bawaan"
-                    className="w-full px-3 py-1.5 text-xs border border-palette-accent rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-palette-primary"
-                  />
-                  <p className="text-[10px] text-palette-text/60">
-                    Bila dikosongkan, sistem menampilkan lambang resmi Tut Wuri Handayani.
-                  </p>
+
+                  <div className="flex items-center gap-3">
+                    <div className="w-16 h-16 rounded-lg border border-palette-accent bg-white flex items-center justify-center p-1.5 shrink-0 overflow-hidden shadow-2xs">
+                      {formData.kopLogoKanan ? (
+                        <img
+                          src={formData.kopLogoKanan}
+                          alt="Logo Sekolah"
+                          className="max-h-full max-w-full object-contain"
+                        />
+                      ) : (
+                        <div className="w-12 h-12 rounded-full border border-sky-300 bg-sky-50 flex items-center justify-center text-center">
+                          <span className="text-[9px] font-bold text-sky-900 font-mono">
+                            SMAN 1
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 space-y-2">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => fileInputKananRef.current?.click()}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-palette-primary hover:bg-palette-text rounded-md transition-colors cursor-pointer"
+                        >
+                          <Upload className="w-3 h-3" />
+                          <span>Unggah Logo</span>
+                        </button>
+                        {formData.kopLogoKanan && (
+                          <button
+                            type="button"
+                            onClick={() => handleClearField('kopLogoKanan')}
+                            className="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 rounded-md border border-rose-200 transition-colors cursor-pointer"
+                            title="Hapus logo kustom & gunakan logo bawaan"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            <span>Hapus</span>
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-palette-text/60 leading-tight">
+                        PNG, JPG, SVG, WebP (maks. 2 MB). Bila kosong, lambang Tut Wuri / Sekolah akan dipakai.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <input
+                      type="text"
+                      value={formData.kopLogoKanan?.startsWith('data:') ? '' : formData.kopLogoKanan || ''}
+                      onChange={(e) => handleChange('kopLogoKanan', e.target.value)}
+                      placeholder="Atau tautan URL gambar (https://...)"
+                      className="w-full px-2.5 py-1.5 text-[11px] border border-palette-accent rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-palette-primary text-palette-text"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -494,6 +671,224 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
               </div>
             </div>
 
+            {/* Box 4: Form Redaksi Kalimat Surat Keterangan Lulus (SKL) */}
+            <div className="bg-white border border-palette-accent rounded-xl p-5 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-palette-accent">
+                <span className="text-xs font-bold uppercase tracking-wider text-palette-primary font-mono flex items-center gap-1.5">
+                  <Type className="w-4 h-4" />
+                  4. Redaksi Kalimat Surat Keterangan Lulus (SKL)
+                </span>
+                <span className="text-[11px] text-palette-text/60">Isi Naskah SKL</span>
+              </div>
+
+              <div className="space-y-4">
+                {/* Kalimat Pembuka */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-palette-text">
+                      Kalimat Pembuka / Konsiderans SKL
+                    </label>
+                    <span className="text-[10px] text-palette-text/60 font-mono">
+                      Variabel dinamis didukung
+                    </span>
+                  </div>
+                  <textarea
+                    rows={3}
+                    value={formData.sklOpeningText || ''}
+                    onChange={(e) => handleChange('sklOpeningText', e.target.value)}
+                    placeholder="Kepala [NAMA_SEKOLAH] selaku Ketua Penyelenggara Ujian Satuan Pendidikan..."
+                    className="w-full px-3 py-2 text-xs border border-palette-accent rounded-lg bg-palette-background focus:bg-white focus:outline-none focus:ring-1 focus:ring-palette-primary leading-relaxed"
+                  />
+                  <div className="flex flex-wrap gap-1.5 text-[10px]">
+                    <span className="text-palette-text/60">Tag variabel:</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleChange(
+                          'sklOpeningText',
+                          (formData.sklOpeningText || '') + ' [NAMA_SEKOLAH]'
+                        )
+                      }
+                      className="px-1.5 py-0.5 rounded bg-palette-accent text-palette-primary font-mono font-semibold hover:bg-palette-accent/80 cursor-pointer"
+                    >
+                      [NAMA_SEKOLAH]
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleChange(
+                          'sklOpeningText',
+                          (formData.sklOpeningText || '') + ' [TAHUN_AJARAN]'
+                        )
+                      }
+                      className="px-1.5 py-0.5 rounded bg-palette-accent text-palette-primary font-mono font-semibold hover:bg-palette-accent/80 cursor-pointer"
+                    >
+                      [TAHUN_AJARAN]
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        handleChange(
+                          'sklOpeningText',
+                          (formData.sklOpeningText || '') + ' [TANGGAL_PLENO]'
+                        )
+                      }
+                      className="px-1.5 py-0.5 rounded bg-palette-accent text-palette-primary font-mono font-semibold hover:bg-palette-accent/80 cursor-pointer"
+                    >
+                      [TANGGAL_PLENO]
+                    </button>
+                  </div>
+                </div>
+
+                {/* Kalimat Penutup */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-palette-text">
+                      Kalimat Penutup / Ketentuan Masa Berlaku SKL
+                    </label>
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={formData.sklClosingText || ''}
+                    onChange={(e) => handleChange('sklClosingText', e.target.value)}
+                    placeholder="Surat Keterangan Lulus ini bersifat resmi dan berlaku sementara..."
+                    className="w-full px-3 py-2 text-xs border border-palette-accent rounded-lg bg-palette-background focus:bg-white focus:outline-none focus:ring-1 focus:ring-palette-primary leading-relaxed"
+                  />
+                </div>
+
+                {/* Tempat Pengesahan & Tanggal Pleno */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-xs font-semibold text-palette-text mb-1 flex items-center gap-1">
+                      <MapPin className="w-3.5 h-3.5 text-palette-primary" />
+                      <span>Tempat / Kota Pengesahan</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.sklLegalLocation || ''}
+                      onChange={(e) => handleChange('sklLegalLocation', e.target.value)}
+                      placeholder="Ciamis"
+                      className="w-full px-3 py-2 text-xs border border-palette-accent rounded-lg bg-palette-background focus:bg-white focus:outline-none focus:ring-1 focus:ring-palette-primary"
+                    />
+                    <p className="text-[10px] text-palette-text/60 mt-0.5">
+                      Dicetak pada tanda tangan SKL: &ldquo;Ditetapkan di: {formData.sklLegalLocation || 'Ciamis'}&rdquo;
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-palette-text mb-1 flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-palette-primary" />
+                      <span>Tanggal Pengesahan / Rapat Pleno</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.plenoDate || ''}
+                      onChange={(e) => handleChange('plenoDate', e.target.value)}
+                      placeholder="4 Mei 2026"
+                      className="w-full px-3 py-2 text-xs border border-palette-accent rounded-lg bg-palette-background focus:bg-white focus:outline-none focus:ring-1 focus:ring-palette-primary"
+                    />
+                    <p className="text-[10px] text-palette-text/60 mt-0.5">
+                      Tanggal hasil rapat kelulusan dewan guru
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Box 5: Upload Tanda Tangan Kepala Sekolah (TTD Opsional) */}
+            <div className="bg-white border border-palette-accent rounded-xl p-5 space-y-4">
+              <div className="flex items-center justify-between pb-2 border-b border-palette-accent">
+                <span className="text-xs font-bold uppercase tracking-wider text-palette-primary font-mono flex items-center gap-1.5">
+                  <PenTool className="w-4 h-4" />
+                  5. Tanda Tangan Kepala Sekolah (Opsional)
+                </span>
+                <span className="text-[11px] text-palette-text/60">Pengesahan Resmi</span>
+              </div>
+
+              {/* Hidden file input for Signature */}
+              <input
+                ref={fileInputTtdRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => handleFileUpload('principalSignature', e)}
+              />
+
+              <div className="p-4 rounded-xl border border-palette-accent bg-palette-background space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h5 className="text-xs font-bold text-palette-text">
+                      Unggah Gambar Tanda Tangan Kepala Sekolah
+                    </h5>
+                    <p className="text-[11px] text-palette-text/70 mt-0.5">
+                      Tanda tangan akan otomatis dicetak di atas nama Kepala Sekolah pada dokumen SKL PDF.
+                    </p>
+                  </div>
+                  {formData.principalSignature ? (
+                    <span className="px-2 py-0.5 rounded bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-mono font-semibold">
+                      TTD Kustom Aktif
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded bg-palette-accent text-palette-text/70 text-[10px] font-mono">
+                      Tanda Tangan Fisik (Kosong)
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-4 pt-1">
+                  <div className="w-36 h-20 rounded-lg border border-palette-accent bg-white flex items-center justify-center p-2 shrink-0 overflow-hidden shadow-2xs">
+                    {formData.principalSignature ? (
+                      <img
+                        src={formData.principalSignature}
+                        alt="Tanda Tangan Kepala Sekolah"
+                        className="max-h-full max-w-full object-contain"
+                      />
+                    ) : (
+                      <div className="text-center text-[10px] text-palette-text/50 font-mono italic">
+                        [Belum Ada TTD]
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex-1 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => fileInputTtdRef.current?.click()}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-palette-primary hover:bg-palette-text rounded-md transition-colors cursor-pointer"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>Unggah Gambar TTD</span>
+                      </button>
+                      {formData.principalSignature && (
+                        <button
+                          type="button"
+                          onClick={() => handleClearField('principalSignature')}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 rounded-md border border-rose-200 transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Hapus TTD</span>
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-palette-text/60 leading-relaxed">
+                      Format disarankan: <strong>PNG transparan</strong> (latar belakang bening) atau JPG/WebP (maks. 2 MB). Bila tidak diunggah, dokumen SKL PDF akan menyisakan ruang kosong yang rapi untuk tanda tangan basah dan stempel fisik sekolah.
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <input
+                    type="text"
+                    value={formData.principalSignature?.startsWith('data:') ? '' : formData.principalSignature || ''}
+                    onChange={(e) => handleChange('principalSignature', e.target.value)}
+                    placeholder="Atau masukkan tautan URL gambar TTD (https://...)"
+                    className="w-full px-2.5 py-1.5 text-[11px] border border-palette-accent rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-palette-primary text-palette-text"
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Bottom Save Bar */}
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
@@ -502,20 +897,20 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 text-xs sm:text-sm font-semibold text-white bg-palette-primary hover:bg-palette-text rounded-lg transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
               >
                 <Save className="w-4 h-4" />
-                <span>{isSaving ? 'Menyimpan Pengaturan...' : 'Simpan Semua Perubahan KOP'}</span>
+                <span>{isSaving ? 'Menyimpan Pengaturan...' : 'Simpan Semua Format KOP & SKL'}</span>
               </button>
             </div>
           </form>
         </div>
 
-        {/* Right Column: Live Interactive SKL Letterhead Preview (5 cols) */}
+        {/* Right Column: Live Interactive SKL Letterhead & Naskah Preview (5 cols) */}
         <div className="lg:col-span-5 space-y-4">
           <div className="bg-white border border-palette-accent rounded-xl p-4 sm:p-5 sticky top-20 shadow-xs space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-palette-accent">
               <div className="flex items-center gap-2">
                 <Eye className="w-4 h-4 text-palette-primary" />
                 <span className="text-xs font-bold uppercase tracking-wider text-palette-text font-mono">
-                  Live Preview KOP Dokumen SKL
+                  Live Preview Dokumen SKL Digital
                 </span>
               </div>
               <span className="px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-palette-accent/80 text-palette-text">
@@ -524,25 +919,25 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
             </div>
 
             {/* Simulated Paper Container */}
-            <div className="bg-white border-2 border-slate-300 rounded-lg p-4 sm:p-5 shadow-inner text-slate-800 space-y-3 font-sans">
+            <div className="bg-white border-2 border-slate-300 rounded-lg p-3 sm:p-4 shadow-inner text-slate-800 space-y-3 font-sans">
               {/* Outer decorative box resembling real SKL format */}
-              <div className="border border-slate-300 p-3 sm:p-4 rounded space-y-3 bg-white">
+              <div className="border border-slate-300 p-3 rounded space-y-2.5 bg-white">
                 {/* KOP SURAT HEADER */}
-                <div className="relative flex items-center justify-between gap-3 pt-1">
+                <div className="relative flex items-center justify-between gap-2.5 pt-0.5">
                   {/* Left Logo (Pemprov / Instansi) */}
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 shrink-0 flex items-center justify-center">
+                  <div className="w-11 h-11 sm:w-13 sm:h-13 shrink-0 flex items-center justify-center">
                     {formData.kopLogoKiri ? (
                       <img
                         src={formData.kopLogoKiri}
-                        alt="Logo Kiri"
+                        alt="Logo Dinas"
                         className="max-h-full max-w-full object-contain"
                         onError={(e) => {
                           (e.target as HTMLElement).style.display = 'none';
                         }}
                       />
                     ) : (
-                      <div className="w-12 h-12 rounded-full border border-slate-400 bg-amber-50 flex items-center justify-center p-1 text-center shadow-2xs">
-                        <span className="text-[8px] font-bold leading-none text-amber-900 font-mono">
+                      <div className="w-11 h-11 rounded-full border border-slate-400 bg-amber-50 flex items-center justify-center p-1 text-center shadow-2xs">
+                        <span className="text-[7.5px] font-bold leading-none text-amber-900 font-mono">
                           JABAR
                         </span>
                       </div>
@@ -551,30 +946,30 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
 
                   {/* Center Text Header */}
                   <div className="flex-1 text-center space-y-0.5">
-                    <p className="text-[10px] sm:text-[11px] font-bold tracking-wide text-slate-800 uppercase leading-tight font-sans">
+                    <p className="text-[9.5px] sm:text-[10.5px] font-bold tracking-wide text-slate-800 uppercase leading-tight font-sans">
                       {formData.kopPemerintah || 'PEMERINTAH DAERAH PROVINSI JAWA BARAT'}
                     </p>
-                    <p className="text-[10px] sm:text-[11px] font-bold tracking-wide text-slate-800 uppercase leading-tight font-sans">
+                    <p className="text-[9.5px] sm:text-[10.5px] font-bold tracking-wide text-slate-800 uppercase leading-tight font-sans">
                       {formData.kopDinas || 'DINAS PENDIDIKAN'}
                     </p>
                     {formData.kopCabangDinas && (
-                      <p className="text-[9px] sm:text-[10px] font-semibold text-slate-700 uppercase leading-tight font-sans">
+                      <p className="text-[8.5px] sm:text-[9.5px] font-semibold text-slate-700 uppercase leading-tight font-sans">
                         {formData.kopCabangDinas}
                       </p>
                     )}
-                    <h4 className="text-xs sm:text-sm font-black tracking-tight text-slate-950 uppercase pt-0.5 leading-snug font-serif">
+                    <h4 className="text-xs sm:text-[13px] font-black tracking-tight text-slate-950 uppercase pt-0.5 leading-snug font-serif">
                       {formData.schoolName || 'SMA NEGERI 1 LUMBUNG'}
                     </h4>
-                    <p className="text-[8px] sm:text-[9px] text-slate-600 leading-tight pt-0.5">
+                    <p className="text-[7.5px] sm:text-[8.5px] text-slate-600 leading-tight pt-0.5">
                       NPSN: {formData.schoolNpsn || '20211502'} | Telp:{' '}
                       {formData.kopTelepon || '(0265) 7578088'} | Kode Pos:{' '}
                       {formData.kopKodePos || '46258'}
                     </p>
-                    <p className="text-[8px] sm:text-[8.5px] text-slate-600 leading-tight">
+                    <p className="text-[7.5px] sm:text-[8px] text-slate-600 leading-tight">
                       {formData.schoolAddress}
                     </p>
                     {(formData.kopEmail || formData.kopWebsite) && (
-                      <p className="text-[7.5px] sm:text-[8px] text-slate-500 font-mono leading-tight">
+                      <p className="text-[7px] sm:text-[7.5px] text-slate-500 font-mono leading-tight">
                         {formData.kopEmail && <span>Email: {formData.kopEmail}</span>}
                         {formData.kopEmail && formData.kopWebsite && <span> | </span>}
                         {formData.kopWebsite && <span>Web: {formData.kopWebsite}</span>}
@@ -583,19 +978,19 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
                   </div>
 
                   {/* Right Logo (Tut Wuri / Sekolah) */}
-                  <div className="w-12 h-12 sm:w-14 sm:h-14 shrink-0 flex items-center justify-center">
+                  <div className="w-11 h-11 sm:w-13 sm:h-13 shrink-0 flex items-center justify-center">
                     {formData.kopLogoKanan ? (
                       <img
                         src={formData.kopLogoKanan}
-                        alt="Logo Kanan"
+                        alt="Logo Sekolah"
                         className="max-h-full max-w-full object-contain"
                         onError={(e) => {
                           (e.target as HTMLElement).style.display = 'none';
                         }}
                       />
                     ) : (
-                      <div className="w-12 h-12 rounded-full border border-slate-400 bg-sky-50 flex items-center justify-center p-1 text-center shadow-2xs">
-                        <span className="text-[8px] font-bold leading-none text-sky-900 font-mono">
+                      <div className="w-11 h-11 rounded-full border border-slate-400 bg-sky-50 flex items-center justify-center p-1 text-center shadow-2xs">
+                        <span className="text-[7.5px] font-bold leading-none text-sky-900 font-mono">
                           SMAN 1
                         </span>
                       </div>
@@ -604,7 +999,7 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
                 </div>
 
                 {/* Double Border Line / Divider */}
-                <div className="pt-1">
+                <div className="pt-0.5">
                   {formData.kopBorderThickness === 'thick_double' ? (
                     <div className="space-y-0.5">
                       <div className="h-[2px] bg-slate-900 w-full" />
@@ -621,26 +1016,61 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
                 </div>
 
                 {/* Body Preview Title */}
-                <div className="text-center pt-2 space-y-0.5">
-                  <h5 className="text-[11px] sm:text-xs font-bold uppercase underline tracking-wider font-serif text-slate-900">
+                <div className="text-center pt-1.5 space-y-0.5">
+                  <h5 className="text-[10.5px] sm:text-[11.5px] font-bold uppercase underline tracking-wider font-serif text-slate-900">
                     SURAT KETERANGAN LULUS
                   </h5>
-                  <p className="text-[9px] font-mono text-slate-600">
+                  <p className="text-[8.5px] font-mono text-slate-600">
                     Nomor: {formData.sklPrefix || '421.3/001/SKL-SMAN1LBG/V/2026'}
                   </p>
                 </div>
 
-                {/* Sample Body excerpt */}
-                <div className="text-[8.5px] text-slate-700 leading-relaxed space-y-1.5 pt-1">
-                  <p>
-                    Kepala {formData.schoolName}, Kabupaten Ciamis Provinsi Jawa Barat selaku Ketua
-                    Penyelenggara Ujian Satuan Pendidikan Tahun Pelajaran {formData.academicYear},
-                    menerangkan bahwa:
-                  </p>
-                  <div className="grid grid-cols-3 gap-1 bg-slate-50 p-2 rounded border border-slate-200 text-[8px] font-mono">
-                    <div>Nama: {previewSampleStudent?.fullName || 'Muhammad Raihan Pratama'}</div>
-                    <div>NISN: {previewSampleStudent?.nisn || '0081234567'}</div>
-                    <div>Status: <span className="font-bold text-emerald-700">LULUS</span></div>
+                {/* Opening Text Live Preview */}
+                <div className="text-[8px] sm:text-[8.5px] text-slate-700 leading-relaxed text-justify">
+                  {resolvedOpeningText}
+                </div>
+
+                {/* Sample Student Identity Block */}
+                <div className="p-2 rounded bg-slate-50 border border-slate-200 text-[7.5px] sm:text-[8px] font-mono space-y-1">
+                  <div className="flex justify-between">
+                    <span>Nama: {previewSampleStudent?.fullName || 'Muhammad Raihan Pratama'}</span>
+                    <span>NISN: {previewSampleStudent?.nisn || '0081234567'}</span>
+                  </div>
+                  <div className="flex justify-between font-bold">
+                    <span>Kelas: {previewSampleStudent?.className || 'XII MIPA 1'}</span>
+                    <span className="text-emerald-700">STATUS: LULUS</span>
+                  </div>
+                </div>
+
+                {/* Closing Text Live Preview */}
+                <div className="text-[8px] sm:text-[8.5px] text-slate-600 leading-relaxed italic text-justify">
+                  Catatan: {resolvedClosingText}
+                </div>
+
+                {/* Signature Preview Block (Without QR code, with Principal signature image or clean space) */}
+                <div className="pt-2 flex justify-end text-[8px] text-slate-800">
+                  <div className="text-center space-y-0.5 min-w-[140px]">
+                    <p>Ditetapkan di: {formData.sklLegalLocation || 'Ciamis'}</p>
+                    <p>Pada tanggal: {formData.plenoDate || '4 Mei 2026'}</p>
+                    <p className="font-bold">Kepala {formData.schoolName || 'SMAN 1 Lumbung'},</p>
+                    
+                    {/* Render uploaded signature or clean space */}
+                    <div className="h-10 flex items-center justify-center my-0.5">
+                      {formData.principalSignature ? (
+                        <img
+                          src={formData.principalSignature}
+                          alt="Tanda Tangan Kepala Sekolah"
+                          className="h-9 max-w-full object-contain"
+                        />
+                      ) : (
+                        <div className="text-[7.5px] text-slate-400 italic font-serif">
+                          [Tanda Tangan & Stempel Fisik]
+                        </div>
+                      )}
+                    </div>
+
+                    <p className="font-bold underline">{formData.principalName}</p>
+                    <p className="font-mono">NIP. {formData.principalNip}</p>
                   </div>
                 </div>
               </div>
@@ -653,7 +1083,7 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
                 <span>Kesesuaian Format Dokumen</span>
               </div>
               <p>
-                Format KOP Surat ini otomatis diterapkan pada seluruh dokumen SKL Digital saat peserta didik maupun pihak sekolah mengunduh PDF.
+                Dokumen SKL PDF dicetak tanpa matriks QR code dan mencantumkan tanda tangan Kepala Sekolah secara rapi dan proporsional.
               </p>
             </div>
           </div>

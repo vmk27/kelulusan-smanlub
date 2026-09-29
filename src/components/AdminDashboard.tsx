@@ -68,6 +68,7 @@ import { SubjectManagementSection } from './admin/SubjectManagementSection';
 import { LetterNumberManagementSection } from './admin/LetterNumberManagementSection';
 import { KopSuratManagementSection } from './admin/KopSuratManagementSection';
 import { AlumniManagementSection } from './admin/AlumniManagementSection';
+import { ClassMonitoringSection } from './admin/ClassMonitoringSection';
 import { SupabaseStorageSection } from './admin/SupabaseStorageSection';
 import { AdminAnalyticsSection } from './admin/AdminAnalyticsSection';
 import { UserManagementSection } from './admin/UserManagementSection';
@@ -122,6 +123,7 @@ type AdminTab =
   | 'database';
 type StudentSubTab = 'classes' | 'subjects' | 'student_biodata' | 'student_grades';
 type LetterSubTab = 'kop_format' | 'letter_numbers';
+type MonitoringSubTab = 'settings' | 'class_monitoring';
 type FilterMode = 'ALL' | 'LULUS' | 'TIDAK_LULUS' | 'MIPA' | 'IPS' | 'CHECKED';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -203,6 +205,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [activeTab, setActiveTab] = useState<AdminTab>('students');
   const [studentSubTab, setStudentSubTab] = useState<StudentSubTab>('student_biodata');
   const [letterSubTab, setLetterSubTab] = useState<LetterSubTab>('kop_format');
+  const [monitoringSubTab, setMonitoringSubTab] = useState<MonitoringSubTab>('settings');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<'ALL' | 'LULUS' | 'TIDAK LULUS'>('ALL');
   const [selectedClassFilter, setSelectedClassFilter] = useState<string>('ALL');
@@ -648,9 +651,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleClassChangeInModal = (nextClassName: string) => {
     if (!editingStudent) return;
     const matchedClass = classRooms.find((c) => c.className === nextClassName);
-    const inferredMajor: 'MIPA' | 'IPS' =
+    const inferredMajor: Major =
       matchedClass?.major ||
-      (nextClassName.toUpperCase().includes('IPS') ? 'IPS' : editingStudent.major);
+      (nextClassName.toUpperCase().includes('IPS')
+        ? 'IPS'
+        : nextClassName.toUpperCase().includes('BHS')
+          ? 'BHS'
+          : nextClassName.toUpperCase().includes('MIPA')
+            ? 'MIPA'
+            : editingStudent.major);
 
     if (inferredMajor !== editingStudent.major) {
       const updatedSubjects = buildSubjectsFromCatalog(
@@ -1093,7 +1102,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   }
 
   return (
-    <div className="min-h-screen bg-palette-background text-palette-text flex flex-col lg:flex-row">
+    <div className="min-h-screen bg-palette-background text-palette-text flex flex-col">
       {/* Mobile Drawer Backdrop Overlay (< 1024px) */}
       {isMobileMenuOpen && (
         <div
@@ -1103,13 +1112,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         />
       )}
 
-      {/* Left Sidebar Navigation (Drawer on Mobile/Tablet < 1024px, Permanent Sidebar on Desktop >= 1024px) */}
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-white border-r border-palette-accent flex flex-col justify-between overflow-y-auto transition-transform duration-200 ease-out lg:static lg:z-auto lg:w-64 lg:max-w-none lg:translate-x-0 lg:shrink-0 lg:sticky lg:top-0 lg:h-screen ${
-          isMobileMenuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
-        }`}
-      >
-        <div className="p-5 space-y-5">
+      {/* Central Content Row (Sidebar + Workspace Stretching Full Height Together) */}
+      <div className="flex-1 flex flex-col lg:flex-row items-stretch w-full min-h-0">
+        {/* Left Sidebar Navigation (Drawer on Mobile/Tablet < 1024px, Permanent Full-Height Sidebar on Desktop >= 1024px) */}
+        <aside
+          className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] bg-white border-r border-palette-accent flex flex-col justify-between overflow-y-auto transition-transform duration-200 ease-out lg:static lg:z-auto lg:w-64 lg:max-w-none lg:translate-x-0 lg:shrink-0 lg:self-stretch lg:min-h-full ${
+            isMobileMenuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
+          }`}
+        >
+          <div className="p-5 space-y-5">
           <div className="flex items-center justify-between gap-2">
             <div>
               <p className="text-[11px] font-semibold text-palette-primary">
@@ -1430,35 +1441,90 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </span>
               </button>
 
-              {/* Menu 3: Status & Pengaturan */}
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveTab('monitoring');
-                  setIsMobileMenuOpen(false);
-                }}
-                className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold text-left transition-colors cursor-pointer ${
-                  activeTab === 'monitoring'
-                    ? 'bg-palette-primary text-white shadow-xs'
-                    : 'text-palette-text hover:bg-palette-accent/40'
-                }`}
-              >
-                <span className="flex items-center gap-2.5 min-w-0 flex-1 text-left">
-                  <Settings className="w-4 h-4 shrink-0" />
-                  <span className="truncate text-left">Status & Pengaturan</span>
-                </span>
-                <span
-                  className={`text-[11px] font-mono shrink-0 ${
+              {/* Menu 3: Status & Pengaturan + 2 Sub-menus */}
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('monitoring');
+                  }}
+                  className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold text-left transition-colors cursor-pointer ${
                     activeTab === 'monitoring'
-                      ? 'text-white'
-                      : settings.isPublished
-                        ? 'text-emerald-700'
-                        : 'text-amber-700'
+                      ? 'bg-palette-primary text-white shadow-xs'
+                      : 'text-palette-text hover:bg-palette-accent/40'
                   }`}
                 >
-                  {settings.isPublished ? 'Aktif' : 'Tutup'}
-                </span>
-              </button>
+                  <span className="flex items-center gap-2.5 min-w-0 flex-1 text-left">
+                    <Settings className="w-4 h-4 shrink-0" />
+                    <span className="truncate text-left">Status & Pengaturan</span>
+                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span
+                      className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded ${
+                        activeTab === 'monitoring'
+                          ? 'bg-white/20 text-white'
+                          : settings.isPublished
+                            ? 'bg-emerald-50 text-emerald-800'
+                            : 'bg-amber-50 text-amber-800'
+                      }`}
+                    >
+                      {settings.isPublished ? 'Aktif' : 'Tutup'}
+                    </span>
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 transition-transform ${
+                        activeTab === 'monitoring' ? 'rotate-0' : '-rotate-90'
+                      }`}
+                    />
+                  </div>
+                </button>
+
+                {/* Sub-menu items under Status & Pengaturan */}
+                <div className="pl-3.5 ml-2 border-l-2 border-palette-accent space-y-1 py-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('monitoring');
+                      setMonitoringSubTab('settings');
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-2 min-h-[38px] rounded-lg text-xs font-medium text-left transition-colors cursor-pointer ${
+                      activeTab === 'monitoring' && monitoringSubTab === 'settings'
+                        ? 'bg-palette-accent text-palette-text font-semibold'
+                        : 'text-palette-text/75 hover:bg-palette-accent/35'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 min-w-0 flex-1 text-left">
+                      <Clock className="w-3.5 h-3.5 text-palette-primary shrink-0" />
+                      <span className="truncate text-left">Pengaturan Pengumuman</span>
+                    </span>
+                    <span className="text-[10px] font-mono text-palette-text/60 shrink-0">
+                      Jadwal & KKM
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('monitoring');
+                      setMonitoringSubTab('class_monitoring');
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-2 min-h-[38px] rounded-lg text-xs font-medium text-left transition-colors cursor-pointer ${
+                      activeTab === 'monitoring' && monitoringSubTab === 'class_monitoring'
+                        ? 'bg-palette-accent text-palette-text font-semibold'
+                        : 'text-palette-text/75 hover:bg-palette-accent/35'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 min-w-0 flex-1 text-left">
+                      <BarChart3 className="w-3.5 h-3.5 text-palette-primary shrink-0" />
+                      <span className="truncate text-left">Pemantauan Kelas</span>
+                    </span>
+                    <span className="font-mono tabular-nums text-[11px] shrink-0">
+                      {classRooms.length}
+                    </span>
+                  </button>
+                </div>
+              </div>
 
               {/* Menu 4: Penyimpanan Supabase */}
               <button
@@ -2999,284 +3065,398 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               />
             ))}
 
-          {/* TAB 3: MONITORING & PENGATURAN PENGUMUMAN */}
+          {/* TAB 3: STATUS, PENGATURAN & PEMANTAUAN KELAS (SUB-MENU SWITCHER) */}
           {activeTab === 'monitoring' && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Left 5 cols: Class Breakdown */}
-              <div className="lg:col-span-5 bg-white border border-palette-accent rounded-xl p-6 space-y-5">
-                <div>
-                  <h2 className="text-base font-semibold text-palette-text">
-                    Ketercapaian & Pemantauan per Kelas
-                  </h2>
-                  <p className="text-xs text-palette-text/70 mt-0.5">
-                    Statistik kelulusan dan jumlah siswa yang sudah login mengecek hasil
-                  </p>
-                </div>
-
-                <div className="space-y-4">
-                  {classRooms.map((cls) => {
-                    const classStudents = students.filter((s) => s.className === cls.className);
-                    const totalInClass = classStudents.length;
-                    const passedInClass = classStudents.filter(
-                      (s) => s.status === 'LULUS'
-                    ).length;
-                    const checkedInClass = classStudents.filter((s) => Boolean(s.checkedAt)).length;
-                    const passPct =
-                      totalInClass > 0 ? Math.round((passedInClass / totalInClass) * 100) : 0;
-
-                    return (
+            <div className="space-y-4">
+              {/* Sub-menu Switcher Toolbar */}
+              <div className="bg-white border border-palette-accent rounded-xl p-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
+                  <button
+                    type="button"
+                    onClick={() => setMonitoringSubTab('settings')}
+                    className={`w-full flex items-center justify-start gap-2.5 px-3.5 py-2.5 min-h-[42px] rounded-lg text-xs font-semibold text-left transition-colors cursor-pointer ${
+                      monitoringSubTab === 'settings'
+                        ? 'bg-palette-primary text-white shadow-xs'
+                        : 'bg-palette-background text-palette-text hover:bg-palette-accent/40 border border-palette-accent'
+                    }`}
+                  >
+                    <Clock className="w-4 h-4 shrink-0" />
+                    <div className="min-w-0 flex-1 text-left">
+                      <div className="truncate">1. Pengaturan Status & Pengumuman</div>
                       <div
-                        key={cls.id}
-                        className="p-4 rounded-lg bg-palette-background border border-palette-accent space-y-2.5"
+                        className={`text-[10px] font-normal ${
+                          monitoringSubTab === 'settings' ? 'text-white/80' : 'text-palette-text/60'
+                        }`}
                       >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <span className="text-sm font-semibold text-palette-text">
-                              {cls.className}
-                            </span>
-                            <p className="text-[11px] text-palette-text/70">
-                              Wali Kelas: {cls.homeroomTeacher}
-                            </p>
-                          </div>
-                          <span className="text-xs font-mono tabular-nums text-palette-text/75">
-                            {passedInClass}/{totalInClass} Lulus ({passPct}%)
-                          </span>
-                        </div>
-                        <div className="w-full h-2 bg-palette-accent rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-palette-primary rounded-full"
-                            style={{ width: `${passPct}%` }}
-                          />
-                        </div>
-                        <div className="flex items-center justify-between text-xs text-palette-text/70">
-                          <span>Sudah Cek Portal:</span>
-                          <span className="font-mono tabular-nums font-semibold text-palette-text">
-                            {checkedInClass} dari {totalInClass} siswa
-                          </span>
-                        </div>
+                        Jadwal Countdown, Status Portal, KKM & TTD Pejabat
                       </div>
-                    );
-                  })}
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setMonitoringSubTab('class_monitoring')}
+                    className={`w-full flex items-center justify-start gap-2.5 px-3.5 py-2.5 min-h-[42px] rounded-lg text-xs font-semibold text-left transition-colors cursor-pointer ${
+                      monitoringSubTab === 'class_monitoring'
+                        ? 'bg-palette-primary text-white shadow-xs'
+                        : 'bg-palette-background text-palette-text hover:bg-palette-accent/40 border border-palette-accent'
+                    }`}
+                  >
+                    <BarChart3 className="w-4 h-4 shrink-0" />
+                    <div className="min-w-0 flex-1 text-left">
+                      <div className="truncate flex items-center justify-between">
+                        <span>2. Pemantauan & Ketercapaian Kelas</span>
+                        <span
+                          className={`font-mono tabular-nums text-[10px] px-1.5 py-0.5 rounded ${
+                            monitoringSubTab === 'class_monitoring'
+                              ? 'bg-white/20 text-white'
+                              : 'bg-palette-accent text-palette-text'
+                          }`}
+                        >
+                          {classRooms.length} Kelas
+                        </span>
+                      </div>
+                      <div
+                        className={`text-[10px] font-normal ${
+                          monitoringSubTab === 'class_monitoring'
+                            ? 'text-white/80'
+                            : 'text-palette-text/60'
+                        }`}
+                      >
+                        Statistik Kelulusan & Siswa Sudah Login Cek SKL
+                      </div>
+                    </div>
+                  </button>
                 </div>
               </div>
 
-              {/* Right 7 cols: Schedule & Official SKL Settings */}
-              <form
-                onSubmit={handleSaveSettingsForm}
-                className="lg:col-span-7 bg-white border border-palette-accent rounded-xl p-6 space-y-5"
-              >
-                <div className="pb-4 border-b border-palette-accent flex items-center justify-between">
-                  <div>
-                    <h2 className="text-base font-semibold text-palette-text">
-                      Pengaturan Jadwal Pengumuman & Parameter SKL
-                    </h2>
-                    <p className="text-xs text-palette-text/70 mt-0.5">
-                      Atur tanggal & jam hitung mundur (countdown) serta pejabat penandatangan SKL
-                    </p>
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={isSavingSettings}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-palette-primary rounded-lg hover:bg-palette-text transition-colors cursor-pointer"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>{isSavingSettings ? 'Menyimpan...' : 'Simpan Pengaturan'}</span>
-                  </button>
-                </div>
-
-                {settingsSavedBanner && (
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900 flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
-                    <span>{settingsSavedBanner}</span>
-                  </div>
-                )}
-
-                {/* Schedule Date & Time Control */}
-                <div className="p-4 rounded-xl bg-palette-background border border-palette-accent space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-palette-primary" />
-                      <h3 className="text-xs font-bold uppercase tracking-wider text-palette-text">
-                        Pengaturan Status & Jadwal Jam Digital (Countdown)
-                      </h3>
+              {/* Sub-menu Content Rendering */}
+              {monitoringSubTab === 'class_monitoring' ? (
+                <ClassMonitoringSection
+                  classRooms={classRooms}
+                  students={students}
+                  settings={settings}
+                />
+              ) : (
+                <form
+                  onSubmit={handleSaveSettingsForm}
+                  className="bg-white border border-palette-accent rounded-xl p-5 sm:p-6 space-y-6"
+                >
+                  <div className="pb-4 border-b border-palette-accent flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <h2 className="font-display text-lg sm:text-xl font-bold tracking-tight text-palette-text">
+                        Pengaturan Jadwal Pengumuman & Parameter SKL
+                      </h2>
+                      <p className="text-xs text-palette-text/70 mt-0.5">
+                        Atur tanggal & jam hitung mundur (countdown), status portal, identitas sekolah, dan pejabat penandatangan SKL
+                      </p>
                     </div>
-                    <span
-                      className={`text-xs font-mono font-semibold px-2.5 py-0.5 rounded ${
-                        formSettings.isPublished
-                          ? 'bg-emerald-100 text-emerald-900'
-                          : 'bg-amber-100 text-amber-900'
-                      }`}
+                    <button
+                      type="submit"
+                      disabled={isSavingSettings}
+                      className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-white bg-palette-primary rounded-lg hover:bg-palette-text transition-colors cursor-pointer shadow-xs shrink-0"
                     >
-                      {formSettings.isPublished ? 'STATUS: DIBUKA' : 'STATUS: DIKUNCI'}
-                    </span>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>{isSavingSettings ? 'Menyimpan...' : 'Simpan Pengaturan'}</span>
+                    </button>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-palette-text mb-1">
-                        Tanggal Pengumuman
-                      </label>
-                      <input
-                        type="date"
-                        value={scheduleDateValue}
-                        onChange={(e) =>
-                          handleScheduleDateTimeChange(e.target.value, scheduleTimeValue)
-                        }
-                        className="w-full px-3 py-2 text-xs font-mono tabular-nums bg-white border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
-                      />
+                  {settingsSavedBanner && (
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900 flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+                      <span>{settingsSavedBanner}</span>
                     </div>
+                  )}
 
-                    <div>
-                      <label className="block text-xs font-medium text-palette-text mb-1">
-                        Jam Pengumuman
-                      </label>
-                      <input
-                        type="time"
-                        value={scheduleTimeValue}
-                        onChange={(e) =>
-                          handleScheduleDateTimeChange(scheduleDateValue, e.target.value)
-                        }
-                        className="w-full px-3 py-2 text-xs font-mono tabular-nums bg-white border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-medium text-palette-text mb-1">
-                        Status Portal Saat Ini
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setFormSettings({
-                            ...formSettings,
-                            isPublished: !formSettings.isPublished,
-                          })
-                        }
-                        className={`w-full px-3 py-2 text-xs font-semibold rounded-lg border transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                  {/* Schedule Date & Time Control */}
+                  <div className="p-4 sm:p-5 rounded-xl bg-palette-background border border-palette-accent space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-palette-primary" />
+                        <h3 className="text-xs font-bold uppercase tracking-wider text-palette-text">
+                          Pengaturan Status & Jadwal Jam Digital (Countdown)
+                        </h3>
+                      </div>
+                      <span
+                        className={`text-xs font-mono font-semibold px-2.5 py-0.5 rounded ${
                           formSettings.isPublished
-                            ? 'bg-emerald-700 text-white border-emerald-800'
-                            : 'bg-amber-600 text-white border-amber-700'
+                            ? 'bg-emerald-100 text-emerald-900'
+                            : 'bg-amber-100 text-amber-900'
                         }`}
                       >
-                        {formSettings.isPublished ? (
-                          <>
-                            <Unlock className="w-3.5 h-3.5" />
-                            <span>Dibuka untuk Siswa</span>
-                          </>
-                        ) : (
-                          <>
-                            <Lock className="w-3.5 h-3.5" />
-                            <span>Dikunci (Countdown)</span>
-                          </>
-                        )}
+                        {formSettings.isPublished ? 'STATUS: DIBUKA (Aktif)' : 'STATUS: DIKUNCI (Countdown)'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-palette-text mb-1">
+                          Tanggal Pengumuman
+                        </label>
+                        <input
+                          type="date"
+                          value={scheduleDateValue}
+                          onChange={(e) =>
+                            handleScheduleDateTimeChange(e.target.value, scheduleTimeValue)
+                          }
+                          className="w-full px-3 py-2 text-xs font-mono tabular-nums bg-white border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-palette-text mb-1">
+                          Jam Pengumuman (WIB)
+                        </label>
+                        <input
+                          type="time"
+                          value={scheduleTimeValue}
+                          onChange={(e) =>
+                            handleScheduleDateTimeChange(scheduleDateValue, e.target.value)
+                          }
+                          className="w-full px-3 py-2 text-xs font-mono tabular-nums bg-white border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-palette-text mb-1">
+                          Status Portal Saat Ini
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFormSettings({
+                              ...formSettings,
+                              isPublished: !formSettings.isPublished,
+                            })
+                          }
+                          className={`w-full px-3 py-2 text-xs font-semibold rounded-lg border transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                            formSettings.isPublished
+                              ? 'bg-emerald-700 text-white border-emerald-800'
+                              : 'bg-amber-600 text-white border-amber-700'
+                          }`}
+                        >
+                          {formSettings.isPublished ? (
+                            <>
+                              <Unlock className="w-3.5 h-3.5" />
+                              <span>Dibuka untuk Siswa</span>
+                            </>
+                          ) : (
+                            <>
+                              <Lock className="w-3.5 h-3.5" />
+                              <span>Dikunci (Countdown)</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-palette-accent flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] text-palette-text/70">Simulasi Cepat:</span>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickSchedulePreset(15, false)}
+                        className="px-2.5 py-1 text-[11px] font-semibold bg-white border border-palette-accent rounded-md hover:bg-palette-accent/50 text-palette-text cursor-pointer"
+                      >
+                        Kunci & Countdown 15 Detik (Auto-Buka)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickSchedulePreset(3600, false)}
+                        className="px-2.5 py-1 text-[11px] font-medium bg-white border border-palette-accent rounded-md hover:bg-palette-accent/50 text-palette-text cursor-pointer"
+                      >
+                        Set +1 Jam (Dikunci)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickSchedulePreset(0, true)}
+                        className="px-2.5 py-1 text-[11px] font-semibold bg-emerald-50 border border-emerald-200 rounded-md hover:bg-emerald-100 text-emerald-900 cursor-pointer"
+                      >
+                        Buka Pengumuman Sekarang
                       </button>
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-palette-accent flex flex-wrap items-center gap-2">
-                    <span className="text-[11px] text-palette-text/70">Simulasi Cepat:</span>
-                    <button
-                      type="button"
-                      onClick={() => handleQuickSchedulePreset(15, false)}
-                      className="px-2.5 py-1 text-[11px] font-semibold bg-white border border-palette-accent rounded-md hover:bg-palette-accent/50 text-palette-text cursor-pointer"
-                    >
-                      Kunci & Countdown 15 Detik (Auto-Buka)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleQuickSchedulePreset(3600, false)}
-                      className="px-2.5 py-1 text-[11px] font-medium bg-white border border-palette-accent rounded-md hover:bg-palette-accent/50 text-palette-text cursor-pointer"
-                    >
-                      Set +1 Jam (Dikunci)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleQuickSchedulePreset(0, true)}
-                      className="px-2.5 py-1 text-[11px] font-semibold bg-emerald-50 border border-emerald-200 rounded-md hover:bg-emerald-100 text-emerald-900 cursor-pointer"
-                    >
-                      Buka Pengumuman Sekarang
-                    </button>
-                  </div>
-                </div>
+                  {/* Institutional & Official Identity */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-medium text-palette-text mb-1">
+                        Nama Satuan Pendidikan (Sekolah)
+                      </label>
+                      <input
+                        type="text"
+                        value={formSettings.schoolName}
+                        onChange={(e) =>
+                          setFormSettings({ ...formSettings, schoolName: e.target.value })
+                        }
+                        className="w-full px-3 py-2 text-xs bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
+                      />
+                    </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="sm:col-span-2">
-                    <label className="block text-xs font-medium text-palette-text mb-1">
-                      Nama Satuan Pendidikan (Sekolah)
-                    </label>
-                    <input
-                      type="text"
-                      value={formSettings.schoolName}
-                      onChange={(e) =>
-                        setFormSettings({ ...formSettings, schoolName: e.target.value })
-                      }
-                      className="w-full px-3 py-2 text-xs bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
-                    />
-                  </div>
+                    <div>
+                      <label className="block text-xs font-medium text-palette-text mb-1">
+                        NPSN Sekolah
+                      </label>
+                      <input
+                        type="text"
+                        value={formSettings.schoolNpsn}
+                        onChange={(e) =>
+                          setFormSettings({ ...formSettings, schoolNpsn: e.target.value })
+                        }
+                        className="w-full px-3 py-2 text-xs font-mono tabular-nums bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-palette-text mb-1">
-                      NPSN Sekolah
-                    </label>
-                    <input
-                      type="text"
-                      value={formSettings.schoolNpsn}
-                      onChange={(e) =>
-                        setFormSettings({ ...formSettings, schoolNpsn: e.target.value })
-                      }
-                      className="w-full px-3 py-2 text-xs font-mono tabular-nums bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
-                    />
-                  </div>
+                    <div>
+                      <label className="block text-xs font-medium text-palette-text mb-1">
+                        Batas KKM Kelulusan
+                      </label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        max="100"
+                        value={formSettings.passingGradeKkm}
+                        onChange={(e) =>
+                          setFormSettings({
+                            ...formSettings,
+                            passingGradeKkm: Number(e.target.value) || 75,
+                          })
+                        }
+                        className="w-full px-3 py-2 text-xs font-mono tabular-nums bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-palette-text mb-1">
-                      Batas KKM Kelulusan
-                    </label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      min="0"
-                      max="100"
-                      value={formSettings.passingGradeKkm}
-                      onChange={(e) =>
-                        setFormSettings({
-                          ...formSettings,
-                          passingGradeKkm: Number(e.target.value) || 75,
-                        })
-                      }
-                      className="w-full px-3 py-2 text-xs font-mono tabular-nums bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
-                    />
-                  </div>
+                    <div>
+                      <label className="block text-xs font-medium text-palette-text mb-1">
+                        Nama Kepala Sekolah
+                      </label>
+                      <input
+                        type="text"
+                        value={formSettings.principalName}
+                        onChange={(e) =>
+                          setFormSettings({ ...formSettings, principalName: e.target.value })
+                        }
+                        className="w-full px-3 py-2 text-xs bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-palette-text mb-1">
-                      Nama Kepala Sekolah
-                    </label>
-                    <input
-                      type="text"
-                      value={formSettings.principalName}
-                      onChange={(e) =>
-                        setFormSettings({ ...formSettings, principalName: e.target.value })
-                      }
-                      className="w-full px-3 py-2 text-xs bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
-                    />
-                  </div>
+                    <div>
+                      <label className="block text-xs font-medium text-palette-text mb-1">
+                        NIP Kepala Sekolah
+                      </label>
+                      <input
+                        type="text"
+                        value={formSettings.principalNip}
+                        onChange={(e) =>
+                          setFormSettings({ ...formSettings, principalNip: e.target.value })
+                        }
+                        className="w-full px-3 py-2 text-xs font-mono tabular-nums bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-palette-text mb-1">
-                      NIP Kepala Sekolah
-                    </label>
-                    <input
-                      type="text"
-                      value={formSettings.principalNip}
-                      onChange={(e) =>
-                        setFormSettings({ ...formSettings, principalNip: e.target.value })
-                      }
-                      className="w-full px-3 py-2 text-xs font-mono tabular-nums bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
-                    />
+                    <div>
+                      <label className="block text-xs font-medium text-palette-text mb-1">
+                        Tempat Ditetapkan SKL (Kota/Kabupaten)
+                      </label>
+                      <input
+                        type="text"
+                        value={formSettings.sklLegalLocation || 'Ciamis'}
+                        onChange={(e) =>
+                          setFormSettings({ ...formSettings, sklLegalLocation: e.target.value })
+                        }
+                        className="w-full px-3 py-2 text-xs bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
+                        placeholder="Contoh: Ciamis"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-palette-text mb-1">
+                        Tanggal Pleno Kelulusan
+                      </label>
+                      <input
+                        type="text"
+                        value={formSettings.plenoDate || '4 Mei 2026'}
+                        onChange={(e) =>
+                          setFormSettings({ ...formSettings, plenoDate: e.target.value })
+                        }
+                        className="w-full px-3 py-2 text-xs bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
+                        placeholder="Contoh: 4 Mei 2026"
+                      />
+                    </div>
+
+                    {/* Upload TTD Kepala Sekolah (Opsional) */}
+                    <div className="sm:col-span-2 p-4 rounded-xl bg-palette-background border border-palette-accent space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <label className="block text-xs font-bold text-palette-text">
+                            Tanda Tangan Kepala Sekolah (Upload Opsional)
+                          </label>
+                          <p className="text-[11px] text-palette-text/70 mt-0.5">
+                            Format PNG transparan atau JPG. Digunakan pada dokumen SKL cetak & portal hasil siswa.
+                          </p>
+                        </div>
+                        {formSettings.principalSignature && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFormSettings({ ...formSettings, principalSignature: '' })
+                            }
+                            className="text-xs text-rose-700 hover:underline font-medium cursor-pointer"
+                          >
+                            Hapus TTD
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-4">
+                        {formSettings.principalSignature ? (
+                          <div className="p-2 bg-white border border-palette-accent rounded-lg max-w-[180px] h-16 flex items-center justify-center">
+                            <img
+                              src={formSettings.principalSignature}
+                              alt="TTD Kepala Sekolah"
+                              className="max-h-12 object-contain"
+                            />
+                          </div>
+                        ) : (
+                          <div className="p-3 bg-white/70 border border-dashed border-palette-text/30 rounded-lg text-center text-xs text-palette-text/60">
+                            Belum ada berkas TTD (Akan menggunakan tanda tangan fisik manual)
+                          </div>
+                        )}
+
+                        <div>
+                          <label className="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-palette-accent rounded-lg text-xs font-medium text-palette-text hover:bg-palette-accent/40 cursor-pointer">
+                            <Upload className="w-3.5 h-3.5 text-palette-primary" />
+                            <span>
+                              {formSettings.principalSignature ? 'Ganti TTD' : 'Pilih Berkas TTD'}
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/png,image/jpeg,image/webp"
+                              className="hidden"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                const reader = new FileReader();
+                                reader.onload = (ev) => {
+                                  const result = ev.target?.result as string;
+                                  if (result) {
+                                    setFormSettings((prev) => ({
+                                      ...prev,
+                                      principalSignature: result,
+                                    }));
+                                  }
+                                };
+                                reader.readAsDataURL(file);
+                                e.target.value = '';
+                              }}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </form>
+                </form>
+              )}
             </div>
           )}
 
@@ -3295,24 +3475,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             />
           )}
         </main>
-
-        {/* Admin Workspace Footer with Creation Year */}
-        <footer className="mt-auto border-t border-palette-accent bg-white px-6 py-4">
-          <div className="max-w-[1440px] mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs text-palette-text/70">
-            <div>
-              <strong className="text-palette-text font-semibold">{settings.schoolName}</strong>
-              <span className="mx-2" aria-hidden="true">
-                ·
-              </span>
-              <span>{settings.schoolAddress}</span>
-            </div>
-            <span className="font-mono tabular-nums text-palette-text/60">
-              © 2026 &ldquo;Sipinter-Lulus&rdquo; · Tahun Pembuatan: 2026 · TA{' '}
-              {settings.academicYear}
-            </span>
-          </div>
-        </footer>
       </div>
+      {/* End Central Content Row */}
+      </div>
+
+      {/* Global Dashboard Footer spanning bottom width beneath sidebar and main workspace */}
+      <footer className="w-full mt-auto border-t border-palette-accent bg-white px-4 sm:px-6 py-4 shrink-0 z-10">
+        <div className="max-w-[1440px] mx-auto flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 text-xs text-palette-text/70">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <strong className="text-palette-text font-semibold">{settings.schoolName}</strong>
+            <span aria-hidden="true">·</span>
+            <span>NPSN: {settings.schoolNpsn}</span>
+            <span className="hidden md:inline" aria-hidden="true">·</span>
+            <span className="hidden md:inline text-palette-text/60">{settings.schoolAddress}</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2.5 font-mono tabular-nums text-[11px] text-palette-text/60">
+            <span>© 2026 &ldquo;Sipinter-Lulus&rdquo;</span>
+            <span>·</span>
+            <span>Tahun Pembuatan: 2026</span>
+            <span>·</span>
+            <span>TA {settings.academicYear}</span>
+            <span>·</span>
+            <span>Disahkan di {settings.sklLegalLocation || 'Ciamis'}</span>
+          </div>
+        </div>
+      </footer>
 
       {/* Add / Edit Student & Grade Modal */}
       {isModalOpen && editingStudent && (

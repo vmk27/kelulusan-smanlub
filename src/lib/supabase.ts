@@ -1852,6 +1852,12 @@ export const INITIAL_SETTINGS: AnnouncementSettings = {
   kopLogoKiri: '',
   kopLogoKanan: '',
   kopBorderThickness: 'standard_double',
+  sklOpeningText:
+    'Kepala SMAN 1 Lumbung selaku Ketua Penyelenggara Ujian Satuan Pendidikan Tahun Pelajaran 2025/2026, berdasarkan Kriteria Kelulusan Peserta Didik dan hasil Rapat Pleno Dewan Pendidik pada tanggal 4 Mei 2026, dengan ini menerangkan bahwa:',
+  sklClosingText:
+    'Surat Keterangan Lulus ini bersifat resmi dan berlaku sementara sampai dengan diterbitkannya Ijazah Asli Tahun Pelajaran 2025/2026.',
+  sklLegalLocation: 'Ciamis',
+  principalSignature: '',
   updatedAt: new Date().toISOString(),
 };
 
@@ -2300,6 +2306,18 @@ function mapRowToSettings(row: Record<string, any>): AnnouncementSettings {
       row.kopBorderThickness ??
       INITIAL_SETTINGS.kopBorderThickness ??
       'standard_double') as any,
+    sklOpeningText: String(
+      row.skl_opening_text ?? row.sklOpeningText ?? INITIAL_SETTINGS.sklOpeningText ?? ''
+    ),
+    sklClosingText: String(
+      row.skl_closing_text ?? row.sklClosingText ?? INITIAL_SETTINGS.sklClosingText ?? ''
+    ),
+    sklLegalLocation: String(
+      row.skl_legal_location ?? row.sklLegalLocation ?? INITIAL_SETTINGS.sklLegalLocation ?? 'Ciamis'
+    ),
+    principalSignature: String(
+      row.principal_signature ?? row.principalSignature ?? INITIAL_SETTINGS.principalSignature ?? ''
+    ),
     updatedAt: String(row.updated_at ?? row.updatedAt ?? new Date().toISOString()),
   };
 }

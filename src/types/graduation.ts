@@ -142,6 +142,11 @@ export interface AnnouncementSettings {
   kopLogoKiri?: string;
   kopLogoKanan?: string;
   kopBorderThickness?: 'standard_double' | 'thick_double' | 'single' | 'minimal';
+  // SKL Document Text Configuration
+  sklOpeningText?: string;
+  sklClosingText?: string;
+  sklLegalLocation?: string;
+  principalSignature?: string;
   updatedAt: string;
 }
 

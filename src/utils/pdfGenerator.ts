@@ -178,7 +178,12 @@ export function generateGraduationCertificatePDF(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9.5);
   doc.setTextColor(30, 41, 59);
-  const openingText = `Kepala ${settings.schoolName} selaku Ketua Penyelenggara Ujian Satuan Pendidikan Tahun Pelajaran ${settings.academicYear}, berdasarkan Kriteria Kelulusan Peserta Didik dan hasil Rapat Pleno Dewan Pendidik pada tanggal ${settings.plenoDate}, dengan ini menerangkan bahwa:`;
+  const defaultOpening = `Kepala ${settings.schoolName} selaku Ketua Penyelenggara Ujian Satuan Pendidikan Tahun Pelajaran ${settings.academicYear}, berdasarkan Kriteria Kelulusan Peserta Didik dan hasil Rapat Pleno Dewan Pendidik pada tanggal ${settings.plenoDate}, dengan ini menerangkan bahwa:`;
+  const rawOpening = settings.sklOpeningText || defaultOpening;
+  const openingText = rawOpening
+    .replace(/\[NAMA_SEKOLAH\]/g, settings.schoolName)
+    .replace(/\[TAHUN_AJARAN\]/g, settings.academicYear)
+    .replace(/\[TANGGAL_PLENO\]/g, settings.plenoDate);
   const splitOpening = doc.splitTextToSize(openingText, pageWidth - marginX * 2);
   doc.text(splitOpening, marginX, cursorY);
   cursorY += splitOpening.length * 4.6 + 3;
@@ -342,69 +347,56 @@ export function generateGraduationCertificatePDF(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(51, 65, 85);
-  const closingNote =
+  const defaultClosing =
     student.notes ||
+    settings.sklClosingText ||
     'Surat Keterangan Lulus ini berlaku sementara sampai dengan diterbitkannya Ijazah asli Tahun Pelajaran ' +
       settings.academicYear +
       '.';
+  const closingNote = defaultClosing
+    .replace(/\[NAMA_SEKOLAH\]/g, settings.schoolName)
+    .replace(/\[TAHUN_AJARAN\]/g, settings.academicYear)
+    .replace(/\[TANGGAL_PLENO\]/g, settings.plenoDate);
   const splitNote = doc.splitTextToSize(`Catatan Akademik: ${closingNote}`, pageWidth - marginX * 2);
   doc.text(splitNote, marginX, cursorY);
 
-  // FOOTER: QR VERIFICATION + PRINCIPAL SIGNATURE
-  cursorY += splitNote.length * 4.2 + 7;
+  // FOOTER: OFFICIAL PRINCIPAL SIGNATURE (WITHOUT QR CODE)
+  cursorY += splitNote.length * 4.2 + 8;
 
-  // Left: QR Verification Matrix
-  const qrSize = 22;
-  drawVerificationMatrix(
-    doc,
-    marginX + 2,
-    cursorY,
-    qrSize,
-    `${student.nisn}-${student.sklNumber}-${student.averageScore}`
-  );
-
-  doc.setFont('courier', 'normal');
-  doc.setFontSize(7);
-  doc.setTextColor(100, 116, 139);
-  doc.text(`ID-VERIF: ${student.nisn}-${student.id.toUpperCase()}`, marginX, cursorY + qrSize + 5);
-  doc.setFont('helvetica', 'italic');
-  doc.text(
-    'Dokumen ini telah ditandatangani secara elektronik & terverifikasi real-time.',
-    marginX,
-    cursorY + qrSize + 9
-  );
-
-  // Right: Principal Signature
-  const signX = pageWidth - marginX - 64;
+  // Right: Principal Signature Block
+  const legalPlace = settings.sklLegalLocation || 'Ciamis';
+  const signX = pageWidth - marginX - 66;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(15, 23, 42);
-  doc.text(`Ditetapkan di: Ciamis`, signX, cursorY + 2);
+  doc.text(`Ditetapkan di: ${legalPlace}`, signX, cursorY + 2);
   doc.text(`Pada tanggal: ${settings.plenoDate}`, signX, cursorY + 6.5);
   doc.setFont('helvetica', 'bold');
   doc.text(`Kepala ${settings.schoolName},`, signX, cursorY + 11.5);
 
-  // Digital Signature Stamp
-  doc.setDrawColor(30, 58, 138);
-  doc.setLineWidth(0.35);
-  doc.roundedRect(signX, cursorY + 14, 52, 9, 1.5, 1.5, 'S');
-  doc.setFont('courier', 'bold');
-  doc.setFontSize(7);
-  doc.setTextColor(30, 58, 138);
-  doc.text('TERVERIFIKASI DIGITAL · SAH', signX + 26, cursorY + 19.5, { align: 'center' });
+  // Optional Principal Signature Image
+  if (settings.principalSignature) {
+    try {
+      doc.addImage(settings.principalSignature, 'PNG', signX + 4, cursorY + 13, 45, 17);
+    } catch {
+      // Graceful fallback to blank space for physical signature
+    }
+  }
 
+  // Name & NIP below signature
+  cursorY += 32;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
   doc.setTextColor(15, 23, 42);
-  doc.text(settings.principalName, signX, cursorY + 28.5);
-  doc.setLineWidth(0.3);
+  doc.text(settings.principalName, signX, cursorY);
+  doc.setLineWidth(0.35);
   doc.setDrawColor(15, 23, 42);
-  doc.line(signX, cursorY + 29.5, signX + 60, cursorY + 29.5);
+  doc.line(signX, cursorY + 1.2, signX + 62, cursorY + 1.2);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(71, 85, 105);
-  doc.text(`NIP. ${settings.principalNip}`, signX, cursorY + 33.5);
+  doc.text(`NIP. ${settings.principalNip}`, signX, cursorY + 5.5);
 
   const safeName = student.fullName.replace(/[^a-zA-Z0-9]/g, '_');
   doc.save(`SKL_2026_${student.nisn}_${safeName}.pdf`);
