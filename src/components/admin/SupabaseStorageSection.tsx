@@ -46,6 +46,7 @@ import {
   SUPABASE_KOP_SURAT_TABLE_SQL,
   SUPABASE_SQL_SETUP_SCRIPT,
   SUPABASE_USER_TABLE_SQL,
+  SUPABASE_ROLE_PERMISSIONS_TABLE_SQL,
   testSupabaseEndpoint,
   uploadFileToSupabaseStorage,
   updateSupabaseConnectionConfig,
@@ -637,6 +638,24 @@ export const SupabaseStorageSection: React.FC<SupabaseStorageSectionProps> = ({
                 <>
                   <Copy className="w-3.5 h-3.5" />
                   <span>Copy SQL Tabel Baru (app_users)</span>
+                </>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleCopyText(SUPABASE_ROLE_PERMISSIONS_TABLE_SQL, 'sql-role-permissions')}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-palette-primary rounded-lg hover:bg-palette-text transition-colors cursor-pointer"
+            >
+              {copiedId === 'sql-role-permissions' ? (
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>SQL Hak Akses Berhasil Disalin!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy SQL Hak Akses (role_permissions)</span>
                 </>
               )}
             </button>

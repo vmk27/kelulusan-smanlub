@@ -252,6 +252,17 @@ export interface DiagnosticLogEntry {
   details?: string;
 }
 
+export interface RolePermission {
+  role: UserRole;
+  menu_key: string;
+  is_allowed: boolean;
+  can_create: boolean;
+  can_read: boolean;
+  can_update: boolean;
+  can_delete: boolean;
+  updated_at: string;
+}
+
 export interface SupabaseDatabaseAuditReport {
   checkedAt: string;
   connectionState: SupabaseConnectionState;

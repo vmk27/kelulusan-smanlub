@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   Plus,
   Edit3,
@@ -20,22 +20,32 @@ import {
   Search,
   CheckCircle2,
   Info,
+  BarChart3,
+  GraduationCap,
+  Lock,
+  Unlock,
+  Settings,
+  Database,
+  Clock,
 } from 'lucide-react';
 import {
   AppUserRecord,
   ClassRoomRecord,
   SubjectCatalogRecord,
   UserRole,
+  RolePermission,
 } from '../../types/graduation';
-import { SUPABASE_USER_TABLE_SQL } from '../../lib/supabase';
+import { SUPABASE_USER_TABLE_SQL, SUPABASE_ROLE_PERMISSIONS_TABLE_SQL, hashStringSHA256, resolveHashToPlaintext, registerPlaintextPassword } from '../../lib/supabase';
 import { TablePagination } from './TablePagination';
 
 interface UserManagementSectionProps {
   users: AppUserRecord[];
   classRooms: ClassRoomRecord[];
   subjectCatalog?: SubjectCatalogRecord[];
+  rolePermissions: RolePermission[];
   onSaveUser: (user: AppUserRecord) => Promise<void>;
   onDeleteUser: (userId: string) => Promise<void>;
+  onSaveRolePermissions: (permissions: RolePermission[]) => Promise<void>;
   onSyncSupabaseTables?: () => Promise<{ ok: boolean; message: string }>;
 }
 
@@ -57,14 +67,38 @@ const ROLE_LABELS: Record<UserRole, { label: string; badgeClass: string; desc: s
   },
 };
 
+const MODULE_METADATA = [
+  { key: 'analytics', label: 'Dashboard Utama / Analisis', desc: 'Halaman dashboard utama ringkasan status akademik.' },
+  { key: 'students', label: 'Manajemen Siswa, Nilai & SKL', desc: 'Penginputan data siswa, transkrip nilai 8 mata pelajaran, keputusan status kelulusan, dan unduh SKL.' },
+  { key: 'letter_settings', label: 'Format KOP Surat & Redaksi Kalimat', desc: 'Atur hierarki instansi, alamat, email, website, logo kiri/kanan, dan tanda tangan digital.' },
+  { key: 'alumni', label: 'Manajemen Alumni & Tracer Study', desc: 'Simpan arsip siswa lulus, input status kelanjutan studi/kerja, nama kampus/kantor, dan nomor telepon.' },
+  { key: 'users', label: 'Manajemen User & Hak Akses', desc: 'Tambah atau ubah akun Operator, Guru Mapel, dan Wali Kelas, serta kontrol izin menu ini.' },
+  { key: 'monitoring', label: 'Status Portal & Jadwal Countdown', desc: 'Penguncian/pembukaan portal secara instan, serta monitoring grafik ketercapaian nilai per kelas.' },
+  { key: 'database', label: 'Penyimpanan Supabase & Backups', desc: 'Audit RLS, log sinkronisasi PostgreSQL, dan test koneksi API key cloud.' },
+];
+
 export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
   users,
   classRooms,
   subjectCatalog = [],
+  rolePermissions = [],
   onSaveUser,
   onDeleteUser,
+  onSaveRolePermissions,
   onSyncSupabaseTables,
 }) => {
+  const [activeSubTab, setActiveSubTab] = useState<'users_list' | 'permissions_list'>('users_list');
+  const [selectedRolePermTab, setSelectedRolePermTab] = useState<UserRole>('admin');
+  const [editedPermissions, setEditedPermissions] = useState<RolePermission[]>([]);
+  const [copiedPermSql, setCopiedPermSql] = useState(false);
+  const [isSavingPerms, setIsSavingPerms] = useState(false);
+
+  useEffect(() => {
+    if (rolePermissions && rolePermissions.length > 0) {
+      setEditedPermissions(rolePermissions);
+    }
+  }, [rolePermissions]);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<'ALL' | UserRole>('ALL');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -193,6 +227,13 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
 
     setIsSaving(true);
     try {
+      registerPlaintextPassword(cleanPin);
+      let finalPin = cleanPin;
+      const isAlreadyHashed = /^[0-9a-fA-F]{64}$/.test(cleanPin);
+      if (!isAlreadyHashed) {
+        finalPin = await hashStringSHA256(cleanPin);
+      }
+
       const payload: AppUserRecord = {
         id: editingId || `usr-${Date.now()}`,
         fullName: cleanName,
@@ -202,7 +243,7 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
         assignedClass:
           assignedClass.trim() ||
           (role === 'admin' ? 'Semua Kelas' : role === 'wali_kelas' ? 'XII MIPA 1' : 'Mata Pelajaran Umum'),
-        accessPin: cleanPin,
+        accessPin: finalPin,
         isActive,
         updatedAt: new Date().toISOString(),
       };
@@ -227,368 +268,658 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
 
   return (
     <div className="space-y-5">
-      {/* Header & Actions */}
-      <div className="bg-white border border-palette-accent rounded-xl p-5 space-y-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-palette-accent/70">
-          <div>
-            <div className="flex items-center gap-2">
-              <UserCog className="w-4 h-4 text-palette-primary" />
-              <h2 className="text-base font-semibold text-palette-text">
-                Manajemen User & Hak Akses Role (&ldquo;Sipinter-Lulus&rdquo; - SMAN 1 Lumbung Ciamis)
-              </h2>
-            </div>
-            <p className="text-xs text-palette-text/70 mt-0.5">
-              Kelola akun pengguna dengan role <strong>Admin</strong>, <strong>Guru</strong>, dan{' '}
-              <strong>Wali Kelas</strong> yang terhubung ke tabel{' '}
-              <code className="font-mono text-palette-primary">public.app_users</code> di Supabase
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIsGuideOpen((prev) => !prev)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-palette-primary bg-palette-accent/50 border border-palette-accent rounded-lg hover:bg-palette-accent transition-colors cursor-pointer"
-            >
-              <HelpCircle className="w-3.5 h-3.5" />
-              <span>Panduan Tambah User</span>
-              {isGuideOpen ? (
-                <ChevronUp className="w-3.5 h-3.5" />
-              ) : (
-                <ChevronDown className="w-3.5 h-3.5" />
-              )}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleCopyUserTableSql}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-palette-text bg-palette-background border border-palette-accent rounded-lg hover:bg-palette-accent/60 transition-colors cursor-pointer"
-            >
-              {copiedSql ? (
-                <>
-                  <Check className="w-3.5 h-3.5 text-emerald-700" />
-                  <span className="text-emerald-800">SQL Tabel User Tersalin</span>
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5 text-palette-primary" />
-                  <span>Copy SQL Tabel User</span>
-                </>
-              )}
-            </button>
-
-            {onSyncSupabaseTables && (
-              <button
-                type="button"
-                disabled={isSyncing}
-                onClick={handleSyncUsers}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-palette-text bg-palette-background border border-palette-accent rounded-lg hover:bg-palette-accent/60 disabled:opacity-50 transition-colors cursor-pointer"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                <span>{isSyncing ? 'Menyinkronkan...' : 'Sinkronkan ke Supabase'}</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={openAddModal}
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-palette-primary rounded-lg hover:bg-palette-text transition-colors cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Tambah User Baru</span>
-            </button>
-          </div>
+      {/* Sub-tab Switcher Bar for Daftar Pengguna vs Manajemen Hak Akses */}
+      <div className="bg-white border border-palette-accent rounded-xl p-3 sm:p-4 shadow-xs space-y-2.5">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-[10px] font-bold text-palette-text/60 uppercase tracking-wider font-mono">
+            SUB-MENU MANAJEMEN USER & OTORISASI
+          </span>
+          <span className="text-xs text-palette-primary font-semibold hidden sm:inline font-mono">
+            {activeSubTab === 'users_list'
+              ? `${users.length} Akun Pengguna Terdaftar`
+              : 'Konfigurasi Pembatasan Hak Akses Menu'}
+          </span>
         </div>
 
-        {/* Role Summary Pills & Search Filter */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-          <div className="relative flex-1 max-w-md">
-            <Search className="w-4 h-4 text-palette-text/50 absolute left-3.5 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
-              placeholder="Cari nama user, username, NIP, atau kelas/mapel..."
-              className="w-full pl-9 pr-4 py-2 text-xs bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-1.5">
-            {(
-              [
-                { id: 'ALL', label: `Semua Role (${roleCounts.total})` },
-                { id: 'admin', label: `Admin (${roleCounts.admin})` },
-                { id: 'wali_kelas', label: `Wali Kelas (${roleCounts.wali_kelas})` },
-                { id: 'guru', label: `Guru (${roleCounts.guru})` },
-              ] as { id: 'ALL' | UserRole; label: string }[]
-            ).map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => {
-                  setRoleFilter(tab.id);
-                  setCurrentPage(1);
-                }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                  roleFilter === tab.id
-                    ? 'bg-palette-primary text-white'
-                    : 'bg-palette-background text-palette-text/80 hover:bg-palette-accent/60'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Collapsible Guide */}
-      {isGuideOpen && (
-        <div className="bg-white border border-palette-primary/35 rounded-xl p-5 space-y-4">
-          <div className="flex items-start justify-between gap-3 pb-3 border-b border-palette-accent">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-palette-accent/60 text-palette-primary flex items-center justify-center shrink-0">
-                <Info className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-sm font-bold text-palette-text">
-                  Panduan Pengisian Data Manajemen User (Admin, Guru, Wali Kelas)
-                </h3>
-                <p className="text-xs text-palette-text/70">
-                  Penjelasan kolom wajib dan cara menambahkan role pengguna baru ke sistem
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setIsGuideOpen(false)}
-              className="text-xs font-semibold text-palette-text/60 hover:text-palette-text cursor-pointer"
-            >
-              Tutup Panduan
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-            <div className="p-4 rounded-lg bg-palette-background border border-palette-accent space-y-2">
-              <p className="font-bold text-palette-text">1. Apa Saja yang Harus Diisi?</p>
-              <ul className="space-y-1.5 text-palette-text/80">
-                <li>
-                  • <strong>Role Pengguna (Wajib):</strong> Pilih <em>Admin / Operator</em>,{' '}
-                  <em>Wali Kelas</em>, atau <em>Guru Mata Pelajaran</em>.
-                </li>
-                <li>
-                  • <strong>Nama Lengkap & Gelar (Wajib):</strong> Nama resmi pendidik atau operator
-                  sekolah.
-                </li>
-                <li>
-                  • <strong>Username & Kode Akses / PIN (Wajib):</strong> Digunakan saat login masuk
-                  ke Dashboard Admin.
-                </li>
-                <li>
-                  • <strong>Kelas Binaan / Mata Pelajaran:</strong> Pilih rombel kelas (untuk Wali
-                  Kelas) atau tulis mata pelajaran yang diampu (untuk Guru).
-                </li>
-              </ul>
-            </div>
-
-            <div className="p-4 rounded-lg bg-palette-background border border-palette-accent space-y-2">
-              <p className="font-bold text-palette-text">2. Langkah Menyimpan ke Supabase</p>
-              <ol className="space-y-1.5 text-palette-text/80 list-decimal list-inside">
-                <li>
-                  Pastikan tabel <code className="font-mono">public.app_users</code> sudah dibuat di
-                  Supabase dengan klik tombol <strong>Copy SQL Tabel User</strong> lalu jalankan di
-                  SQL Editor Supabase.
-                </li>
-                <li>
-                  Klik <strong>+ Tambah User Baru</strong>, lengkapi formulir, lalu klik{' '}
-                  <strong>Simpan User</strong>.
-                </li>
-                <li>
-                  User yang berstatus <strong>Aktif</strong> dapat langsung login menggunakan
-                  Username atau Kode Aksesnya.
-                </li>
-              </ol>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Status Notification */}
-      {statusBanner && (
-        <div
-          className={`p-3.5 rounded-xl border text-xs flex items-center justify-between gap-3 ${
-            statusBanner.ok
-              ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-              : 'bg-amber-50 border-amber-200 text-amber-900'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-            <span>{statusBanner.text}</span>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
           <button
             type="button"
-            onClick={() => setStatusBanner(null)}
-            className="text-[11px] font-semibold underline cursor-pointer shrink-0"
+            onClick={() => setActiveSubTab('users_list')}
+            className={`w-full flex items-center justify-start gap-2.5 px-3.5 py-2.5 min-h-[42px] rounded-lg text-xs font-semibold text-left transition-colors cursor-pointer ${
+              activeSubTab === 'users_list'
+                ? 'bg-palette-primary text-white shadow-xs'
+                : 'bg-palette-background text-palette-text hover:bg-palette-accent/40 border border-palette-accent'
+            }`}
           >
-            Tutup
+            <Users className="w-4 h-4 shrink-0" />
+            <div className="min-w-0 flex-1 text-left">
+              <div className="truncate">1. Daftar Akun Pengguna Sistem</div>
+              <div
+                className={`text-[10px] font-normal ${
+                  activeSubTab === 'users_list' ? 'text-white/80' : 'text-palette-text/60'
+                }`}
+              >
+                Data Operator, Guru Mapel, & Wali Kelas SMAN 1 Lumbung
+              </div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('permissions_list')}
+            className={`w-full flex items-center justify-start gap-2.5 px-3.5 py-2.5 min-h-[42px] rounded-lg text-xs font-semibold text-left transition-colors cursor-pointer ${
+              activeSubTab === 'permissions_list'
+                ? 'bg-palette-primary text-white shadow-xs'
+                : 'bg-palette-background text-palette-text hover:bg-palette-accent/40 border border-palette-accent'
+            }`}
+          >
+            <ShieldCheck className="w-4 h-4 shrink-0" />
+            <div className="min-w-0 flex-1 text-left">
+              <div className="truncate">2. Manajemen Hak Akses Menu & Fitur</div>
+              <div
+                className={`text-[10px] font-normal ${
+                  activeSubTab === 'permissions_list' ? 'text-white/80' : 'text-palette-text/60'
+                }`}
+              >
+                Atur Menu & CRUD yang Diizinkan per Role (Checkbox)
+              </div>
+            </div>
           </button>
         </div>
-      )}
+      </div>
 
-      {/* Users Table */}
-      <div className="bg-white border border-palette-accent rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-palette-accent/45 border-b border-palette-accent text-xs font-semibold text-palette-text">
-                <th className="py-3 px-4 w-14 text-center">No</th>
-                <th className="py-3 px-4">Nama Lengkap & NIP</th>
-                <th className="py-3 px-4">Username</th>
-                <th className="py-3 px-4">Role Akses</th>
-                <th className="py-3 px-4">Kelas Binaan / Mapel</th>
-                <th className="py-3 px-4">Kode Akses (PIN)</th>
-                <th className="py-3 px-4">Status</th>
-                <th className="py-3 px-4 text-right">Aksi</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-palette-accent/60 text-sm">
-              {paginatedUsers.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-10 text-center text-xs text-palette-text/60">
-                    Tidak ada data user yang sesuai dengan filter pencarian.
-                  </td>
-                </tr>
-              ) : (
-                paginatedUsers.map((u, idx) => {
-                  const rowNumber = (safePage - 1) * pageSize + idx + 1;
-                  const roleMeta = ROLE_LABELS[u.role] || ROLE_LABELS.guru;
-                  const isDeleting = confirmDeleteId === u.id;
-                  const isPinShown = Boolean(revealedPins[u.id]);
+      {activeSubTab === 'users_list' && (
+        <>
+          {/* Header & Actions */}
+          <div className="bg-white border border-palette-accent rounded-xl p-5 space-y-4">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-palette-accent/70">
+              <div>
+                <div className="flex items-center gap-2">
+                  <UserCog className="w-4 h-4 text-palette-primary" />
+                  <h2 className="text-base font-semibold text-palette-text">
+                    Manajemen User & Hak Akses Role (&ldquo;Sipinter-Lulus&rdquo; - SMAN 1 Lumbung Ciamis)
+                  </h2>
+                </div>
+                <p className="text-xs text-palette-text/70 mt-0.5">
+                  Kelola akun pengguna dengan role <strong>Admin</strong>, <strong>Guru</strong>, dan{' '}
+                  <strong>Wali Kelas</strong> yang terhubung ke tabel{' '}
+                  <code className="font-mono text-palette-primary">public.app_users</code> di Supabase
+                </p>
+              </div>
 
-                  return (
-                    <tr key={u.id} className="hover:bg-palette-accent/20 transition-colors">
-                      <td className="py-3.5 px-4 text-center">
-                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-palette-accent/60 font-mono tabular-nums text-xs font-bold text-palette-text">
-                          {rowNumber}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <div className="font-semibold text-palette-text">{u.fullName}</div>
-                        <div className="text-xs font-mono tabular-nums text-palette-text/65">
-                          NIP: {u.nip || '-'}
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 font-semibold text-palette-text">
-                        @{u.username}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border ${roleMeta.badgeClass}`}
-                        >
-                          {u.role === 'admin' && <ShieldCheck className="w-3.5 h-3.5" />}
-                          {u.role === 'wali_kelas' && <Building2 className="w-3.5 h-3.5" />}
-                          {u.role === 'guru' && <BookOpen className="w-3.5 h-3.5" />}
-                          <span>{roleMeta.label}</span>
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-xs font-medium text-palette-text">
-                        {u.assignedClass || '-'}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <div className="inline-flex items-center gap-1.5 font-mono text-xs bg-palette-background border border-palette-accent px-2.5 py-1 rounded">
-                          <span>{isPinShown ? u.accessPin : '••••••••'}</span>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setRevealedPins((prev) => ({ ...prev, [u.id]: !prev[u.id] }))
-                            }
-                            className="text-palette-text/60 hover:text-palette-primary cursor-pointer"
-                            title={isPinShown ? 'Sembunyikan PIN' : 'Lihat PIN'}
-                          >
-                            {isPinShown ? (
-                              <EyeOff className="w-3.5 h-3.5" />
-                            ) : (
-                              <Eye className="w-3.5 h-3.5" />
-                            )}
-                          </button>
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleActive(u)}
-                          className={`px-2.5 py-0.5 rounded text-xs font-semibold border cursor-pointer ${
-                            u.isActive
-                              ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                              : 'bg-slate-100 border-slate-300 text-slate-600'
-                          }`}
-                        >
-                          {u.isActive ? 'Aktif' : 'Nonaktif'}
-                        </button>
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        {isDeleting ? (
-                          <div className="inline-flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                await onDeleteUser(u.id);
-                                setConfirmDeleteId(null);
-                              }}
-                              className="px-2 py-1 text-xs font-semibold bg-rose-700 text-white rounded hover:bg-rose-800 cursor-pointer"
-                            >
-                              Ya, Hapus
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setConfirmDeleteId(null)}
-                              className="px-2 py-1 text-xs text-palette-text bg-palette-accent/50 rounded hover:bg-palette-accent cursor-pointer"
-                            >
-                              Batal
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="inline-flex items-center justify-end gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => openEditModal(u)}
-                              className="p-1.5 text-palette-text/75 hover:text-palette-primary hover:bg-palette-accent/40 rounded-md transition-colors cursor-pointer"
-                              title="Edit User"
-                            >
-                              <Edit3 className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setConfirmDeleteId(u.id)}
-                              className="p-1.5 text-palette-text/75 hover:text-rose-700 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
-                              title="Hapus User"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsGuideOpen((prev) => !prev)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-palette-primary bg-palette-accent/50 border border-palette-accent rounded-lg hover:bg-palette-accent transition-colors cursor-pointer"
+                >
+                  <HelpCircle className="w-3.5 h-3.5" />
+                  <span>Panduan Tambah User</span>
+                  {isGuideOpen ? (
+                    <ChevronUp className="w-3.5 h-3.5" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  )}
+                </button>
+
+
+                {onSyncSupabaseTables && (
+                  <button
+                    type="button"
+                    disabled={isSyncing}
+                    onClick={handleSyncUsers}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-palette-text bg-palette-background border border-palette-accent rounded-lg hover:bg-palette-accent/60 disabled:opacity-50 transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                    <span>{isSyncing ? 'Menyinkronkan...' : 'Sinkronkan ke Supabase'}</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={openAddModal}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-palette-primary rounded-lg hover:bg-palette-text transition-colors cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Tambah User Baru</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Role Summary Pills & Search Filter */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 text-palette-text/50 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  placeholder="Cari nama user, username, NIP, atau kelas/mapel..."
+                  className="w-full pl-9 pr-4 py-2 text-xs bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(
+                  [
+                    { id: 'ALL', label: `Semua Role (${roleCounts.total})` },
+                    { id: 'admin', label: `Admin (${roleCounts.admin})` },
+                    { id: 'wali_kelas', label: `Wali Kelas (${roleCounts.wali_kelas})` },
+                    { id: 'guru', label: `Guru (${roleCounts.guru})` },
+                  ] as { id: 'ALL' | UserRole; label: string }[]
+                ).map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => {
+                      setRoleFilter(tab.id);
+                      setCurrentPage(1);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                      roleFilter === tab.id
+                        ? 'bg-palette-primary text-white'
+                        : 'bg-palette-background text-palette-text/80 hover:bg-palette-accent/60'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Collapsible Guide */}
+          {isGuideOpen && (
+            <div className="bg-white border border-palette-primary/35 rounded-xl p-5 space-y-4">
+              <div className="flex items-start justify-between gap-3 pb-3 border-b border-palette-accent">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-palette-accent/60 text-palette-primary flex items-center justify-center shrink-0">
+                    <Info className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-palette-text">
+                      Panduan Pengisian Data Manajemen User (Admin, Guru, Wali Kelas)
+                    </h3>
+                    <p className="text-xs text-palette-text/70">
+                      Penjelasan kolom wajib dan cara menambahkan role pengguna baru ke sistem
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsGuideOpen(false)}
+                  className="text-xs font-semibold text-palette-text/60 hover:text-palette-text cursor-pointer"
+                >
+                  Tutup Panduan
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                <div className="p-4 rounded-lg bg-palette-background border border-palette-accent space-y-2">
+                  <p className="font-bold text-palette-text">1. Apa Saja yang Harus Diisi?</p>
+                  <ul className="space-y-1.5 text-palette-text/80">
+                    <li>
+                      • <strong>Role Pengguna (Wajib):</strong> Pilih <em>Admin / Operator</em>,{' '}
+                      <em>Wali Kelas</em>, atau <em>Guru Mata Pelajaran</em>.
+                    </li>
+                    <li>
+                      • <strong>Nama Lengkap & Gelar (Wajib):</strong> Nama resmi pendidik atau operator
+                      sekolah.
+                    </li>
+                    <li>
+                      • <strong>Username & Password:</strong> Digunakan saat login masuk
+                      ke Dashboard Admin.
+                    </li>
+                    <li>
+                      • <strong>Kelas Binaan / Mata Pelajaran:</strong> Pilih rombel kelas (untuk Wali
+                      Kelas) atau tulis mata pelajaran yang diampu (untuk Guru).
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="p-4 rounded-lg bg-palette-background border border-palette-accent space-y-2">
+                  <p className="font-bold text-palette-text">2. Langkah Menyimpan ke Supabase</p>
+                  <ol className="space-y-1.5 text-palette-text/80 list-decimal list-inside">
+                    <li>
+                      Pastikan tabel <code className="font-mono">public.app_users</code> sudah dibuat di
+                      Supabase dengan klik tombol <strong>Copy SQL Tabel User</strong> lalu jalankan di
+                      SQL Editor Supabase.
+                    </li>
+                    <li>
+                      Klik <strong>+ Tambah User Baru</strong>, lengkapi formulir, lalu klik{' '}
+                      <strong>Simpan User</strong>.
+                    </li>
+                    <li>
+                      User yang berstatus <strong>Aktif</strong> dapat langsung login menggunakan
+                      Username atau Kode Aksesnya/Password.
+                    </li>
+                  </ol>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Status Notification */}
+          {statusBanner && (
+            <div
+              className={`p-3.5 rounded-xl border text-xs flex items-center justify-between gap-3 ${
+                statusBanner.ok
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  : 'bg-amber-50 border-amber-200 text-amber-900'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{statusBanner.text}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setStatusBanner(null)}
+                className="text-[11px] font-semibold underline cursor-pointer shrink-0"
+              >
+                Tutup
+              </button>
+            </div>
+          )}
+
+          {/* Users Table */}
+          <div className="bg-white border border-palette-accent rounded-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-palette-accent/45 border-b border-palette-accent text-xs font-semibold text-palette-text">
+                    <th className="py-3 px-4 w-14 text-center">No</th>
+                    <th className="py-3 px-4">Nama Lengkap & NIP</th>
+                    <th className="py-3 px-4">Username</th>
+                    <th className="py-3 px-4">Role Akses</th>
+                    <th className="py-3 px-4">Kelas Binaan / Mapel</th>
+                    <th className="py-3 px-4">Password</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4 text-right">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-palette-accent/60 text-sm">
+                  {paginatedUsers.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-10 text-center text-xs text-palette-text/60">
+                        Tidak ada data user yang sesuai dengan filter pencarian.
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                  ) : (
+                    paginatedUsers.map((u, idx) => {
+                      const rowNumber = (safePage - 1) * pageSize + idx + 1;
+                      const roleMeta = ROLE_LABELS[u.role] || ROLE_LABELS.guru;
+                      const isDeleting = confirmDeleteId === u.id;
+                      const isPinShown = Boolean(revealedPins[u.id]);
 
-        <TablePagination
-          currentPage={safePage}
-          totalItems={filteredUsers.length}
-          pageSize={pageSize}
-          onPageChange={setCurrentPage}
-          onPageSizeChange={setPageSize}
-          itemLabel="pengguna"
-        />
-      </div>
+                      return (
+                        <tr key={u.id} className="hover:bg-palette-accent/20 transition-colors">
+                          <td className="py-3.5 px-4 text-center">
+                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-palette-accent/60 font-mono tabular-nums text-xs font-bold text-palette-text">
+                              {rowNumber}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <div className="text-xs font-bold text-palette-text">{u.fullName}</div>
+                            <div className="text-xs font-mono tabular-nums text-palette-text/65">
+                              NIP: {u.nip || '-'}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 font-semibold text-palette-text">
+                            @{u.username}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <span
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border ${roleMeta.badgeClass}`}
+                            >
+                              {u.role === 'admin' && <ShieldCheck className="w-3.5 h-3.5" />}
+                              {u.role === 'wali_kelas' && <Building2 className="w-3.5 h-3.5" />}
+                              {u.role === 'guru' && <BookOpen className="w-3.5 h-3.5" />}
+                              <span>{roleMeta.label}</span>
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 text-xs font-medium text-palette-text">
+                            {u.assignedClass || '-'}
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <div className="inline-flex items-center gap-1.5 font-mono text-xs bg-palette-background border border-palette-accent px-2.5 py-1 rounded">
+                              <span>
+                                {isPinShown
+                                  ? (() => {
+                                      const resolved = resolveHashToPlaintext(u.accessPin);
+                                      return /^[0-9a-fA-F]{64}$/.test(resolved) ? '•••••••• (Ter-hash / Aman)' : resolved;
+                                    })()
+                                  : '••••••••'}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setRevealedPins((prev) => ({ ...prev, [u.id]: !prev[u.id] }))
+                                }
+                                className="text-palette-text/60 hover:text-palette-primary cursor-pointer"
+                                title={isPinShown ? 'Sembunyikan PIN' : 'Lihat PIN'}
+                              >
+                                {isPinShown ? (
+                                  <EyeOff className="w-3.5 h-3.5" />
+                                ) : (
+                                  <Eye className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <button
+                              type="button"
+                              onClick={() => handleToggleActive(u)}
+                              className={`px-2.5 py-0.5 rounded text-xs font-semibold border cursor-pointer ${
+                                u.isActive
+                                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                                  : 'bg-slate-100 border-slate-300 text-slate-600'
+                              }`}
+                            >
+                              {u.isActive ? 'Aktif' : 'Nonaktif'}
+                            </button>
+                          </td>
+                          <td className="py-3.5 px-4 text-right">
+                            {isDeleting ? (
+                              <div className="inline-flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    await onDeleteUser(u.id);
+                                    setConfirmDeleteId(null);
+                                  }}
+                                  className="px-2 py-1 text-xs font-semibold bg-rose-700 text-white rounded hover:bg-rose-800 cursor-pointer"
+                                >
+                                  Ya, Hapus
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteId(null)}
+                                  className="px-2 py-1 text-xs text-palette-text bg-palette-accent/50 rounded hover:bg-palette-accent cursor-pointer"
+                                >
+                                  Batal
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="inline-flex items-center justify-end gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => openEditModal(u)}
+                                  className="p-1.5 text-palette-text/75 hover:text-palette-primary hover:bg-palette-accent/40 rounded-md transition-colors cursor-pointer"
+                                  title="Edit User"
+                                >
+                                  <Edit3 className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteId(u.id)}
+                                  className="p-1.5 text-palette-text/75 hover:text-rose-700 hover:bg-rose-50 rounded-md transition-colors cursor-pointer"
+                                  title="Hapus User"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <TablePagination
+              currentPage={safePage}
+              totalItems={filteredUsers.length}
+              pageSize={pageSize}
+              onPageChange={setCurrentPage}
+              onPageSizeChange={setPageSize}
+              itemLabel="pengguna"
+            />
+          </div>
+        </>
+      )}
+
+      {activeSubTab === 'permissions_list' && (
+        <div className="space-y-4">
+          <div className="bg-white border border-palette-accent rounded-xl p-5 sm:p-6 space-y-6">
+            <div className="pb-4 border-b border-palette-accent/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 className="font-display text-lg font-bold text-palette-text flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-palette-primary animate-pulse" />
+                  Manajemen Otorisasi & Hak Akses Menu
+                </h3>
+                <p className="text-xs text-palette-text/70 mt-0.5">
+                  Centang modul menu dan izin CRUD yang diizinkan untuk diakses oleh masing-masing tipe peran kependidikan (Role)
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+
+
+                <button
+                  type="button"
+                  disabled={isSavingPerms}
+                  onClick={async () => {
+                    setIsSavingPerms(true);
+                    try {
+                      await onSaveRolePermissions(editedPermissions);
+                      setStatusBanner({
+                        ok: true,
+                        text: 'Konfigurasi hak akses menu & fitur berhasil disimpan dan disinkronkan otomatis ke database Supabase.',
+                      });
+                    } catch (err: any) {
+                      setStatusBanner({
+                        ok: false,
+                        text: 'Gagal menyimpan: ' + (err?.message || 'Error tidak diketahui'),
+                      });
+                    } finally {
+                      setIsSavingPerms(false);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-palette-primary rounded-lg hover:bg-palette-text transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{isSavingPerms ? 'Menyimpan...' : 'Simpan Hak Akses'}</span>
+                </button>
+              </div>
+            </div>
+
+            {statusBanner && (
+              <div
+                className={`p-3.5 rounded-xl border text-xs flex items-center justify-between gap-3 ${
+                  statusBanner.ok
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                    : 'bg-amber-50 border-amber-200 text-amber-900'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600" />
+                  <span>{statusBanner.text}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setStatusBanner(null)}
+                  className="text-[11px] font-semibold underline cursor-pointer shrink-0"
+                >
+                  Tutup
+                </button>
+              </div>
+            )}
+
+            {/* Role Tab Switcher inside Permissions */}
+            <div className="flex flex-wrap items-center gap-2 pb-2 border-b border-palette-accent/70">
+              {(['admin', 'wali_kelas', 'guru'] as UserRole[]).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setSelectedRolePermTab(r)}
+                  className={`px-4 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer border ${
+                    selectedRolePermTab === r
+                      ? 'bg-palette-primary text-white border-palette-primary shadow-xs'
+                      : 'bg-palette-background text-palette-text/80 border-palette-accent hover:bg-palette-accent/50'
+                  }`}
+                >
+                  Role: <span className="uppercase">{r.replace('_', ' ')}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Permissions Checkbox Table */}
+            <div className="bg-white border border-palette-accent rounded-xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-palette-accent/45 border-b border-palette-accent text-xs font-semibold text-palette-text">
+                      <th className="py-3 px-4 w-14 text-center">No</th>
+                      <th className="py-3 px-4">Nama Modul Menu Aplikasi</th>
+                      <th className="py-3 px-4 text-center w-36">Tampilkan Menu</th>
+                      <th className="py-3 px-4 text-center w-24">Create (C)</th>
+                      <th className="py-3 px-4 text-center w-24">Read (R)</th>
+                      <th className="py-3 px-4 text-center w-24">Update (U)</th>
+                      <th className="py-3 px-4 text-center w-24">Delete (D)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-palette-accent/60 text-xs">
+                    {MODULE_METADATA.map((mod, idx) => {
+                      const currentPerm = editedPermissions.find(
+                        (p) => p.role === selectedRolePermTab && p.menu_key === mod.key
+                      ) || {
+                        role: selectedRolePermTab,
+                        menu_key: mod.key,
+                        is_allowed: false,
+                        can_create: false,
+                        can_read: false,
+                        can_update: false,
+                        can_delete: false,
+                      };
+
+                      const handleCheckboxChange = (field: keyof Omit<RolePermission, 'role' | 'menu_key' | 'updated_at'>) => {
+                        const updatedList = [...editedPermissions];
+                        const idxPerm = updatedList.findIndex(
+                          (p) => p.role === selectedRolePermTab && p.menu_key === mod.key
+                        );
+                        const nextPerm = {
+                          ...currentPerm,
+                          role: selectedRolePermTab,
+                          menu_key: mod.key,
+                          [field]: !currentPerm[field],
+                          updated_at: new Date().toISOString(),
+                        };
+
+                        if (idxPerm >= 0) {
+                          updatedList[idxPerm] = nextPerm;
+                        } else {
+                          updatedList.push(nextPerm);
+                        }
+                        setEditedPermissions(updatedList);
+                      };
+
+                      return (
+                        <tr key={mod.key} className="hover:bg-palette-accent/20 transition-colors">
+                          <td className="py-3.5 px-4 text-center">
+                            <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-palette-accent/60 font-mono text-[11px] font-bold text-palette-text">
+                              {idx + 1}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4">
+                            <div className="flex items-start gap-2.5">
+                              <span className="p-1.5 rounded-lg bg-palette-accent/70 text-palette-primary shrink-0 mt-0.5">
+                                {mod.key === 'analytics' && <BarChart3 className="w-4 h-4" />}
+                                {mod.key === 'students' && <Users className="w-4 h-4" />}
+                                {mod.key === 'letter_settings' && <Building2 className="w-4 h-4" />}
+                                {mod.key === 'alumni' && <GraduationCap className="w-4 h-4" />}
+                                {mod.key === 'users' && <UserCog className="w-4 h-4" />}
+                                {mod.key === 'monitoring' && <Clock className="w-4 h-4" />}
+                                {mod.key === 'database' && <Database className="w-4 h-4" />}
+                              </span>
+                              <div>
+                                <div className="font-bold text-palette-text text-xs">{mod.label}</div>
+                                <div className="text-[11px] text-palette-text/65 leading-relaxed mt-0.5 max-w-md">
+                                  {mod.desc}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            <label className="inline-flex items-center justify-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={currentPerm.is_allowed}
+                                onChange={() => handleCheckboxChange('is_allowed')}
+                                className="w-4 h-4 accent-palette-primary rounded cursor-pointer"
+                              />
+                            </label>
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            <label className="inline-flex items-center justify-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                disabled={!currentPerm.is_allowed}
+                                checked={currentPerm.can_create}
+                                onChange={() => handleCheckboxChange('can_create')}
+                                className="w-3.5 h-3.5 accent-palette-primary rounded cursor-pointer disabled:opacity-30"
+                              />
+                            </label>
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            <label className="inline-flex items-center justify-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                disabled={!currentPerm.is_allowed}
+                                checked={currentPerm.can_read}
+                                onChange={() => handleCheckboxChange('can_read')}
+                                className="w-3.5 h-3.5 accent-palette-primary rounded cursor-pointer disabled:opacity-30"
+                              />
+                            </label>
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            <label className="inline-flex items-center justify-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                disabled={!currentPerm.is_allowed}
+                                checked={currentPerm.can_update}
+                                onChange={() => handleCheckboxChange('can_update')}
+                                className="w-3.5 h-3.5 accent-palette-primary rounded cursor-pointer disabled:opacity-30"
+                              />
+                            </label>
+                          </td>
+                          <td className="py-3.5 px-4 text-center">
+                            <label className="inline-flex items-center justify-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                disabled={!currentPerm.is_allowed}
+                                checked={currentPerm.can_delete}
+                                onChange={() => handleCheckboxChange('can_delete')}
+                                className="w-3.5 h-3.5 accent-palette-primary rounded cursor-pointer disabled:opacity-30"
+                              />
+                            </label>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-palette-accent/35 border border-palette-accent/70 text-[11px] space-y-1">
+              <div className="font-semibold text-palette-text flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5 text-palette-primary shrink-0" />
+                <span>Catatan Izin Otorisasi CRUD:</span>
+              </div>
+              <p className="text-palette-text/80 leading-relaxed pl-5">
+                • <strong>C (Create)</strong>: Hak menambah data baru. · <strong>R (Read)</strong>: Hak melihat detail data. · <strong>U (Update)</strong>: Hak mengubah data & transkrip nilai. · <strong>D (Delete)</strong>: Hak menghapus data permanen.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Add / Edit User */}
       {isModalOpen && (

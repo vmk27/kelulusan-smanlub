@@ -23,6 +23,7 @@ import {
   SupabaseSyncStatus,
   TableInspectionResult,
   UserRole,
+  RolePermission,
 } from '../types/graduation';
 
 export const DEFAULT_SUPABASE_URL =
@@ -478,6 +479,25 @@ export const EXPECTED_DATABASE_TABLES: ExpectedTableDefinition[] = [
       { name: 'checksum', expectedType: 'TEXT', openApiTypes: ['string', 'text'], nullable: false, description: 'Hash integritas script migrasi' },
       { name: 'status', expectedType: 'TEXT', openApiTypes: ['string', 'text'], nullable: false, description: 'Status eksekusi (applied)' },
       { name: 'applied_at', expectedType: 'TIMESTAMPTZ', openApiTypes: ['string', 'timestamp with time zone'], nullable: false, description: 'Timestamp migrasi diterapkan' },
+    ],
+  },
+  {
+    tableName: 'role_permissions',
+    entityName: 'RolePermission (Manajemen Hak Akses Menu)',
+    description: 'Menyimpan konfigurasi hak akses menu, izin membaca, membuat, memperbarui, dan menghapus untuk setiap role.',
+    primaryKey: 'role,menu_key',
+    uniqueConstraints: [],
+    indexes: [],
+    realtimeEnabled: true,
+    columns: [
+      { name: 'role', expectedType: 'TEXT', openApiTypes: ['string', 'text'], nullable: false, isPrimaryKey: true, description: 'Role pengguna (admin, guru, wali_kelas)' },
+      { name: 'menu_key', expectedType: 'TEXT', openApiTypes: ['string', 'text'], nullable: false, isPrimaryKey: true, description: 'Kunci menu (analytics, students, letter_settings, dll.)' },
+      { name: 'is_allowed', expectedType: 'BOOLEAN', openApiTypes: ['boolean'], nullable: false, description: 'Apakah menu diizinkan untuk tampil' },
+      { name: 'can_create', expectedType: 'BOOLEAN', openApiTypes: ['boolean'], nullable: false, description: 'Izin membuat data' },
+      { name: 'can_read', expectedType: 'BOOLEAN', openApiTypes: ['boolean'], nullable: false, description: 'Izin membaca data' },
+      { name: 'can_update', expectedType: 'BOOLEAN', openApiTypes: ['boolean'], nullable: false, description: 'Izin memperbarui data' },
+      { name: 'can_delete', expectedType: 'BOOLEAN', openApiTypes: ['boolean'], nullable: false, description: 'Izin menghapus data' },
+      { name: 'updated_at', expectedType: 'TIMESTAMPTZ', openApiTypes: ['string', 'timestamp with time zone'], nullable: false, description: 'Waktu pembaruan terakhir' },
     ],
   },
 ];
@@ -996,6 +1016,64 @@ CREATE POLICY "app_files_public_select_policy"
   TO anon, authenticated
   USING (bucket_id = 'app-files');`;
 
+export const SUPABASE_ROLE_PERMISSIONS_TABLE_SQL = `-- ============================================================================
+-- SETTING SQL TABEL BARU: HAK AKSES ROLE (public.role_permissions)
+-- Mengatur Menu apa saja yang boleh tampil pada masing-masing ROLE
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS public.role_permissions (
+  role TEXT NOT NULL,
+  menu_key TEXT NOT NULL,
+  is_allowed BOOLEAN NOT NULL DEFAULT true,
+  can_create BOOLEAN NOT NULL DEFAULT false,
+  can_read BOOLEAN NOT NULL DEFAULT true,
+  can_update BOOLEAN NOT NULL DEFAULT false,
+  can_delete BOOLEAN NOT NULL DEFAULT false,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (role, menu_key)
+);
+
+ALTER TABLE public.role_permissions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "role_permissions_select_policy" ON public.role_permissions;
+DROP POLICY IF EXISTS "role_permissions_write_policy" ON public.role_permissions;
+CREATE POLICY "role_permissions_select_policy" ON public.role_permissions FOR SELECT USING (true);
+CREATE POLICY "role_permissions_write_policy" ON public.role_permissions FOR ALL USING (true) WITH CHECK (true);
+
+-- Seed awal data hak akses untuk masing-masing role
+INSERT INTO public.role_permissions (role, menu_key, is_allowed, can_create, can_read, can_update, can_delete, updated_at)
+VALUES
+  -- admin
+  ('admin', 'analytics', true, true, true, true, true, now()),
+  ('admin', 'students', true, true, true, true, true, now()),
+  ('admin', 'letter_settings', true, true, true, true, true, now()),
+  ('admin', 'alumni', true, true, true, true, true, now()),
+  ('admin', 'users', true, true, true, true, true, now()),
+  ('admin', 'monitoring', true, true, true, true, true, now()),
+  ('admin', 'database', true, true, true, true, true, now()),
+  -- wali_kelas
+  ('wali_kelas', 'analytics', true, false, true, false, false, now()),
+  ('wali_kelas', 'students', true, false, true, true, false, now()),
+  ('wali_kelas', 'letter_settings', false, false, false, false, false, now()),
+  ('wali_kelas', 'alumni', true, false, true, false, false, now()),
+  ('wali_kelas', 'users', false, false, false, false, false, now()),
+  ('wali_kelas', 'monitoring', true, false, true, false, false, now()),
+  ('wali_kelas', 'database', false, false, false, false, false, now()),
+  -- guru
+  ('guru', 'analytics', true, false, true, false, false, now()),
+  ('guru', 'students', true, false, true, true, false, now()),
+  ('guru', 'letter_settings', false, false, false, false, false, now()),
+  ('guru', 'alumni', false, false, false, false, false, now()),
+  ('guru', 'users', false, false, false, false, false, now()),
+  ('guru', 'monitoring', false, false, false, false, false, now()),
+  ('guru', 'database', false, false, false, false, false, now())
+ON CONFLICT (role, menu_key) DO UPDATE SET
+  is_allowed = EXCLUDED.is_allowed,
+  can_create = EXCLUDED.can_create,
+  can_read = EXCLUDED.can_read,
+  can_update = EXCLUDED.can_update,
+  can_delete = EXCLUDED.can_delete,
+  updated_at = now();`;
+
 export const SUPABASE_SQL_SETUP_SCRIPT = `-- ============================================================================
 -- SIPINTER-LULUS (SMAN 1 LUMBUNG CIAMIS) COMPLETE SUPABASE SQL SETUP (V001 - V007)
 -- Jalankan pada SQL Editor Supabase:
@@ -1013,6 +1091,8 @@ ${SUPABASE_USER_TABLE_SQL}
 ${SUPABASE_SUBJECT_TABLE_SQL}
 
 ${SUPABASE_LETTER_NUMBER_TABLE_SQL}
+
+${SUPABASE_ROLE_PERMISSIONS_TABLE_SQL}
 
 ${SUPABASE_STORAGE_BUCKET_SQL}
 `;
@@ -2021,6 +2101,33 @@ export const INITIAL_USERS: AppUserRecord[] = [
   },
 ];
 
+export const INITIAL_ROLE_PERMISSIONS: RolePermission[] = [
+  // admin
+  { role: 'admin', menu_key: 'analytics', is_allowed: true, can_create: true, can_read: true, can_update: true, can_delete: true, updated_at: '2026-09-29T11:20:00.000Z' },
+  { role: 'admin', menu_key: 'students', is_allowed: true, can_create: true, can_read: true, can_update: true, can_delete: true, updated_at: '2026-09-29T11:20:00.000Z' },
+  { role: 'admin', menu_key: 'letter_settings', is_allowed: true, can_create: true, can_read: true, can_update: true, can_delete: true, updated_at: '2026-09-29T11:20:00.000Z' },
+  { role: 'admin', menu_key: 'alumni', is_allowed: true, can_create: true, can_read: true, can_update: true, can_delete: true, updated_at: '2026-09-29T11:20:00.000Z' },
+  { role: 'admin', menu_key: 'users', is_allowed: true, can_create: true, can_read: true, can_update: true, can_delete: true, updated_at: '2026-09-29T11:20:00.000Z' },
+  { role: 'admin', menu_key: 'monitoring', is_allowed: true, can_create: true, can_read: true, can_update: true, can_delete: true, updated_at: '2026-09-29T11:20:00.000Z' },
+  { role: 'admin', menu_key: 'database', is_allowed: true, can_create: true, can_read: true, can_update: true, can_delete: true, updated_at: '2026-09-29T11:20:00.000Z' },
+  // wali_kelas
+  { role: 'wali_kelas', menu_key: 'analytics', is_allowed: true, can_create: false, can_read: true, can_update: false, can_delete: false, updated_at: '2026-09-29T11:20:00.000Z' },
+  { role: 'wali_kelas', menu_key: 'students', is_allowed: true, can_create: false, can_read: true, can_update: true, can_delete: false, updated_at: '2026-09-29T11:20:00.000Z' },
+  { role: 'wali_kelas', menu_key: 'letter_settings', is_allowed: false, can_create: false, can_read: false, can_update: false, can_delete: false, updated_at: '2026-09-29T11:20:00.000Z' },
+  { role: 'wali_kelas', menu_key: 'alumni', is_allowed: true, can_create: false, can_read: true, can_update: false, can_delete: false, updated_at: '2026-09-29T11:20:00.000Z' },
+  { role: 'wali_kelas', menu_key: 'users', is_allowed: false, can_create: false, can_read: false, can_update: false, can_delete: false, updated_at: '2026-09-29T11:20:00.000Z' },
+  { role: 'wali_kelas', menu_key: 'monitoring', is_allowed: true, can_create: false, can_read: true, can_update: false, can_delete: false, updated_at: '2026-09-29T11:20:00.000Z' },
+  { role: 'wali_kelas', menu_key: 'database', is_allowed: false, can_create: false, can_read: false, can_update: false, can_delete: false, updated_at: '2026-09-29T11:20:00.000Z' },
+  // guru
+  { role: 'guru', menu_key: 'analytics', is_allowed: true, can_create: false, can_read: true, can_update: false, can_delete: false, updated_at: '2026-09-29T11:20:00.000Z' },
+  { role: 'guru', menu_key: 'students', is_allowed: true, can_create: false, can_read: true, can_update: true, can_delete: false, updated_at: '2026-09-29T11:20:00.000Z' },
+  { role: 'guru', menu_key: 'letter_settings', is_allowed: false, can_create: false, can_read: false, can_update: false, can_delete: false, updated_at: '2026-09-29T11:20:00.000Z' },
+  { role: 'guru', menu_key: 'alumni', is_allowed: false, can_create: false, can_read: false, can_update: false, can_delete: false, updated_at: '2026-09-29T11:20:00.000Z' },
+  { role: 'guru', menu_key: 'users', is_allowed: false, can_create: false, can_read: false, can_update: false, can_delete: false, updated_at: '2026-09-29T11:20:00.000Z' },
+  { role: 'guru', menu_key: 'monitoring', is_allowed: false, can_create: false, can_read: false, can_update: false, can_delete: false, updated_at: '2026-09-29T11:20:00.000Z' },
+  { role: 'guru', menu_key: 'database', is_allowed: false, can_create: false, can_read: false, can_update: false, can_delete: false, updated_at: '2026-09-29T11:20:00.000Z' },
+];
+
 export const INITIAL_STUDENTS: StudentRecord[] = [
   {
     id: 'std-001',
@@ -2667,6 +2774,74 @@ function saveLocalUsers(users: AppUserRecord[]) {
   }
 }
 
+export function loadLocalRolePermissions(): RolePermission[] {
+  try {
+    const raw = localStorage.getItem('gradugate_local_role_permissions_v1');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch {
+    // ignore
+  }
+  localStorage.setItem('gradugate_local_role_permissions_v1', JSON.stringify(INITIAL_ROLE_PERMISSIONS));
+  return INITIAL_ROLE_PERMISSIONS;
+}
+
+export function saveLocalRolePermissions(permissions: RolePermission[]) {
+  try {
+    localStorage.setItem('gradugate_local_role_permissions_v1', JSON.stringify(permissions));
+  } catch {
+    // ignore
+  }
+}
+
+function mapRowToRolePermission(row: Record<string, any>): RolePermission {
+  return {
+    role: row.role as any,
+    menu_key: row.menu_key || row.menuKey,
+    is_allowed: Boolean(row.is_allowed ?? row.isAllowed ?? true),
+    can_create: Boolean(row.can_create ?? row.canCreate ?? false),
+    can_read: Boolean(row.can_read ?? row.canRead ?? true),
+    can_update: Boolean(row.can_update ?? row.canUpdate ?? false),
+    can_delete: Boolean(row.can_delete ?? row.canDelete ?? false),
+    updated_at: String(row.updated_at ?? row.updatedAt ?? new Date().toISOString()),
+  };
+}
+
+function mapRolePermissionToRow(perm: RolePermission) {
+  return {
+    role: perm.role,
+    menu_key: perm.menu_key,
+    is_allowed: perm.is_allowed,
+    can_create: perm.can_create,
+    can_read: perm.can_read,
+    can_update: perm.can_update,
+    can_delete: perm.can_delete,
+    updated_at: perm.updated_at,
+  };
+}
+
+export async function saveRolePermissions(
+  permissions: RolePermission[]
+): Promise<{ rolePermissions: RolePermission[]; syncedToPostgres: boolean }> {
+  saveLocalRolePermissions(permissions);
+  broadcastStateChange({ type: 'ROLE_PERMISSIONS_UPDATED' as any, rolePermissions: permissions } as any);
+
+  if (!currentConfig.autoSync) {
+    return { rolePermissions: permissions, syncedToPostgres: false };
+  }
+
+  try {
+    const { error } = await getSupabaseClient()
+      .from('role_permissions')
+      .upsert(permissions.map(mapRolePermissionToRow), { onConflict: 'role,menu_key' });
+    return { rolePermissions: permissions, syncedToPostgres: !error };
+  } catch {
+    return { rolePermissions: permissions, syncedToPostgres: false };
+  }
+}
+
 export function loadLocalSubjectCatalog(): SubjectCatalogRecord[] {
   try {
     const raw = localStorage.getItem(LOCAL_SUBJECTS_KEY);
@@ -2906,8 +3081,10 @@ export async function fetchGraduationData(): Promise<{
   alumni: AlumniRecord[];
   users: AppUserRecord[];
   settings: AnnouncementSettings;
+  rolePermissions: RolePermission[];
   syncStatus: SupabaseSyncStatus;
 }> {
+  await populatePasswordCache();
   const localClasses = loadLocalClassRooms();
   const localSubjects = loadLocalSubjectCatalog();
   const localLetterNumbers = loadLocalLetterNumbers();
@@ -2915,12 +3092,13 @@ export async function fetchGraduationData(): Promise<{
   const localAlumni = loadLocalAlumni();
   const localUsers = loadLocalUsers();
   const localSettings = loadLocalSettings();
+  const localRolePermissions = loadLocalRolePermissions();
   const cfg = loadSupabaseConfig();
   const startMs = performance.now();
 
   try {
     const db = getSupabaseClient();
-    const [classesRes, subjectsRes, lettersRes, studentsRes, alumniRes, usersRes, settingsRes] =
+    const [classesRes, subjectsRes, lettersRes, studentsRes, alumniRes, usersRes, settingsRes, permissionsRes] =
       await Promise.all([
         db.from('class_rooms').select('*').order('class_name', { ascending: true }),
         db.from('subject_catalog').select('*').order('sort_order', { ascending: true }),
@@ -2929,6 +3107,7 @@ export async function fetchGraduationData(): Promise<{
         db.from('alumni').select('*').order('transferred_at', { ascending: false }),
         db.from('app_users').select('*').order('full_name', { ascending: true }),
         db.from('announcement_settings').select('*').eq('id', 'default').maybeSingle(),
+        db.from('role_permissions').select('*').order('role', { ascending: true }),
       ]);
 
     const latencyMs = Math.round(performance.now() - startMs);
@@ -3003,6 +3182,16 @@ export async function fetchGraduationData(): Promise<{
         await db.from('announcement_settings').upsert(mapSettingsToRow(localSettings));
       }
 
+      let finalRolePermissions = localRolePermissions;
+      if (!permissionsRes.error) {
+        if (permissionsRes.data && permissionsRes.data.length > 0) {
+          finalRolePermissions = permissionsRes.data.map(mapRowToRolePermission);
+          saveLocalRolePermissions(finalRolePermissions);
+        } else if (cfg.autoSync && localRolePermissions.length > 0) {
+          await db.from('role_permissions').upsert(localRolePermissions.map(mapRolePermissionToRow));
+        }
+      }
+
       return {
         classRooms: finalClasses,
         subjectCatalog: finalSubjects,
@@ -3011,6 +3200,7 @@ export async function fetchGraduationData(): Promise<{
         alumni: finalAlumni,
         users: finalUsers,
         settings: finalSettings,
+        rolePermissions: finalRolePermissions,
         syncStatus: {
           connected: true,
           connectionState: 'connected',
@@ -3031,6 +3221,7 @@ export async function fetchGraduationData(): Promise<{
       alumni: localAlumni,
       users: localUsers,
       settings: localSettings,
+      rolePermissions: localRolePermissions,
       syncStatus: {
         connected: true,
         connectionState: 'connected',
@@ -3051,6 +3242,7 @@ export async function fetchGraduationData(): Promise<{
       alumni: localAlumni,
       users: localUsers,
       settings: localSettings,
+      rolePermissions: localRolePermissions,
       syncStatus: {
         connected: false,
         connectionState: 'error',
@@ -3617,6 +3809,8 @@ export async function upsertAppUserRecord(
     (u) => u.id !== userItem.id && u.username.toLowerCase() === cleanUsername
   );
 
+  const rawPin = (userItem.accessPin || 'admin2026').trim();
+
   const stamped: AppUserRecord = {
     ...userItem,
     id: existingByUsername ? existingByUsername.id : userItem.id,
@@ -3624,7 +3818,7 @@ export async function upsertAppUserRecord(
     fullName: userItem.fullName.trim(),
     nip: (userItem.nip || '').trim(),
     assignedClass: (userItem.assignedClass || '').trim(),
-    accessPin: (userItem.accessPin || 'admin2026').trim(),
+    accessPin: rawPin, // Simpan teks polos (unhashed) di local storage agar terbaca di Manajemen User UI
     updatedAt: new Date().toISOString(),
   };
 
@@ -3641,9 +3835,20 @@ export async function upsertAppUserRecord(
 
   try {
     const db = getSupabaseClient();
+    
+    // Hash password hanya saat dikirim ke tabel app_users di Supabase Cloud!
+    let dbPin = stamped.accessPin;
+    const isAlreadyHashed = /^[0-9a-fA-F]{64}$/.test(dbPin);
+    if (!isAlreadyHashed && dbPin) {
+      dbPin = await hashStringSHA256(dbPin);
+    }
+
     const { error } = await db
       .from('app_users')
-      .upsert(mapAppUserToRow(stamped), { onConflict: 'id' });
+      .upsert({
+        ...mapAppUserToRow(stamped),
+        access_pin: dbPin,
+      }, { onConflict: 'id' });
 
     if (error) {
       return {
@@ -3947,11 +4152,22 @@ export async function syncAllLocalDataToSupabase(
     }
 
     const localUsers = loadLocalUsers();
+    const securedUsers = await Promise.all(
+      localUsers.map(async (u) => {
+        let finalPin = (u.accessPin || '').trim();
+        const isAlreadyHashed = /^[0-9a-fA-F]{64}$/.test(finalPin);
+        if (!isAlreadyHashed && finalPin) {
+          finalPin = await hashStringSHA256(finalPin);
+        }
+        return { ...u, accessPin: finalPin };
+      })
+    );
+
     const [clsRes, sRes, almRes, usrRes, cfgRes] = await Promise.all([
       db.from('class_rooms').upsert(classRooms.map(mapClassRoomToRow), { onConflict: 'id' }),
       db.from('students').upsert(students.map(mapStudentToRow), { onConflict: 'id' }),
       db.from('alumni').upsert(alumni.map(mapAlumniToRow), { onConflict: 'id' }),
-      db.from('app_users').upsert(localUsers.map(mapAppUserToRow), { onConflict: 'id' }),
+      db.from('app_users').upsert(securedUsers.map(mapAppUserToRow), { onConflict: 'id' }),
       db.from('announcement_settings').upsert(mapSettingsToRow(settings), { onConflict: 'id' }),
     ]);
 
@@ -4387,6 +4603,53 @@ export async function uploadFileToSupabaseStorage(
     return { url: null, error: 'Gagal mendapatkan URL publik dari Supabase Storage', fromSupabaseStorage: false };
   } catch (err: any) {
     return { url: null, error: err?.message || 'Gagal mengunggah berkas ke Supabase Storage', fromSupabaseStorage: false };
+  }
+}
+
+export async function hashStringSHA256(text: string): Promise<string> {
+  const msgBuffer = new TextEncoder().encode(text);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+const hashToPlaintextMap = new Map<string, string>();
+
+export function registerPlaintextPassword(plaintext: string) {
+  if (!plaintext || (plaintext.length === 64 && /^[0-9a-fA-F]{64}$/.test(plaintext))) return;
+  hashStringSHA256(plaintext).then(hash => {
+    hashToPlaintextMap.set(hash.toLowerCase(), plaintext);
+  });
+}
+
+export function resolveHashToPlaintext(hashOrPlain: string): string {
+  if (!hashOrPlain) return '';
+  const isHash = /^[0-9a-fA-F]{64}$/.test(hashOrPlain);
+  if (!isHash) return hashOrPlain;
+  return hashToPlaintextMap.get(hashOrPlain.toLowerCase()) || hashOrPlain;
+}
+
+export async function populatePasswordCache() {
+  const defaults = ['admin2026', 'sipinter2026', '123456', 'operator', 'operator2026', 'guru2026', 'wali2026'];
+  for (const pw of defaults) {
+    try {
+      const hash = await hashStringSHA256(pw);
+      hashToPlaintextMap.set(hash.toLowerCase(), pw);
+    } catch {
+      // ignore
+    }
+  }
+  try {
+    const localUsers = loadLocalUsers();
+    for (const u of localUsers) {
+      const pin = (u.accessPin || '').trim();
+      if (pin && pin.length !== 64) {
+        const hash = await hashStringSHA256(pin);
+        hashToPlaintextMap.set(hash.toLowerCase(), pin);
+      }
+    }
+  } catch {
+    // ignore
   }
 }
 

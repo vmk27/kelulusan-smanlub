@@ -23,6 +23,7 @@ import {
   StudentRecord,
   SubjectCatalogRecord,
   SupabaseSyncStatus,
+  RolePermission,
 } from './types/graduation';
 import {
   bulkUpsertStudentRecords,
@@ -40,6 +41,9 @@ import {
   INITIAL_STUDENTS,
   INITIAL_SUBJECT_CATALOG,
   INITIAL_USERS,
+  INITIAL_ROLE_PERMISSIONS,
+  loadLocalRolePermissions,
+  saveRolePermissions,
   recordStudentCheckIn,
   restoreAlumniToStudent,
   subscribeToGraduationRealtime,
@@ -82,6 +86,7 @@ export default function App() {
   const [alumni, setAlumni] = useState<AlumniRecord[]>(INITIAL_ALUMNI);
   const [users, setUsers] = useState<AppUserRecord[]>(INITIAL_USERS);
   const [settings, setSettings] = useState<AnnouncementSettings>(INITIAL_SETTINGS);
+  const [rolePermissions, setRolePermissions] = useState<RolePermission[]>(INITIAL_ROLE_PERMISSIONS);
   const [syncStatus, setSyncStatus] = useState<SupabaseSyncStatus>({
     connected: true,
     mode: 'realtime_hybrid',
@@ -119,6 +124,7 @@ export default function App() {
       setAlumni(result.alumni);
       setUsers(result.users);
       setSettings(result.settings);
+      setRolePermissions(result.rolePermissions);
       setSyncStatus(result.syncStatus);
     } finally {
       setIsLoadingData(false);
@@ -506,6 +512,16 @@ export default function App() {
     }
   };
 
+  const handleSaveRolePermissions = async (nextPerms: RolePermission[]) => {
+    setIsMutating(true);
+    try {
+      const res = await saveRolePermissions(nextPerms);
+      setRolePermissions(res.rolePermissions);
+    } finally {
+      setIsMutating(false);
+    }
+  };
+
   const handleSyncSupabaseTables = async () => {
     setIsMutating(true);
     try {
@@ -529,6 +545,7 @@ export default function App() {
           alumni={alumni}
           users={users}
           settings={settings}
+          rolePermissions={rolePermissions}
           syncStatus={syncStatus}
           isLoadingData={isLoadingData}
           onSaveClassRoom={handleSaveClassRoom}
@@ -547,6 +564,7 @@ export default function App() {
           onSaveUser={handleSaveUser}
           onDeleteUser={handleDeleteUser}
           onSaveSettings={handleSaveSettings}
+          onSaveRolePermissions={handleSaveRolePermissions}
           onSyncSupabaseTables={handleSyncSupabaseTables}
           onRefreshData={loadData}
           onBackToLanding={() => setViewMode('landing')}
