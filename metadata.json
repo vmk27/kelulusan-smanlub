@@ -1,0 +1,6 @@
+{
+  "name": "GraduGate — Portal Pengumuman Kelulusan & SKL Digital",
+  "description": "Sistem informasi pengumuman kelulusan siswa berbasis web secara real-time dan aman dengan verifikasi NISN & tanggal lahir, unduh Surat Keterangan Lulus (PDF), serta dashboard manajemen nilai admin terintegrasi Supabase.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
