@@ -1017,9 +1017,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <ArrowLeft className="w-4 h-4 shrink-0" />
             <span>Kembali ke Portal Pengumuman Siswa</span>
           </button>
-          <span className="text-xs font-mono tabular-nums text-palette-text/70">
-            NPSN {settings.schoolNpsn}
-          </span>
+          
         </div>
 
         <div className="max-w-4xl w-full mx-auto grid grid-cols-1 md:grid-cols-12 bg-white border border-palette-accent rounded-xl overflow-hidden my-auto shadow-xs">

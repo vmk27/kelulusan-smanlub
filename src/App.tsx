@@ -587,7 +587,7 @@ export default function App() {
             }}
             className="font-display text-sm sm:text-base md:text-lg font-bold tracking-tight text-palette-text truncate min-w-0"
           >
-            &ldquo;Sipinter-Lulus&rdquo; - SMAN 1 Lumbung Ciamis
+            Sipinter-Lulus - SMAN 1 Lumbung Ciamis
           </a>
 
           <div className="flex items-center gap-2 shrink-0">
