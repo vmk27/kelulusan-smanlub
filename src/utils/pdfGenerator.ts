@@ -27,6 +27,64 @@ export function formatIndonesianDate(isoDate: string): string {
   return `${day} ${monthName} ${year}`;
 }
 
+async function loadImageForPdf(
+  rawUrl: string | undefined
+): Promise<{
+  dataUrl: string;
+  format: 'PNG' | 'JPEG';
+  width: number;
+  height: number;
+  aspect: number;
+} | null> {
+  if (!rawUrl) return null;
+  const url = rawUrl.trim();
+  if (!url) return null;
+
+  if (url.startsWith('data:image/')) {
+    const isJpeg = url.startsWith('data:image/jpeg') || url.startsWith('data:image/jpg');
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const width = img.naturalWidth || img.width || 240;
+        const height = img.naturalHeight || img.height || 240;
+        const aspect = width / height || 1;
+        resolve({ dataUrl: url, format: isJpeg ? 'JPEG' : 'PNG', width, height, aspect });
+      };
+      img.onerror = () => {
+        resolve({ dataUrl: url, format: isJpeg ? 'JPEG' : 'PNG', width: 240, height: 240, aspect: 1 });
+      };
+      img.src = url;
+    });
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const width = img.naturalWidth || img.width || 240;
+        const height = img.naturalHeight || img.height || 240;
+        const aspect = width / height || 1;
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          const dataUrl = canvas.toDataURL('image/png');
+          resolve({ dataUrl, format: 'PNG', width, height, aspect });
+          return;
+        }
+      } catch {
+        // Fallback
+      }
+      resolve(null);
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
 function drawVerificationMatrix(doc: jsPDF, x: number, y: number, size: number, seedStr: string) {
   const cells = 11;
   const cellSize = size / cells;
@@ -58,10 +116,17 @@ function drawVerificationMatrix(doc: jsPDF, x: number, y: number, size: number, 
   }
 }
 
-export function generateGraduationCertificatePDF(
+export async function generateGraduationCertificatePDF(
   student: StudentRecord,
   settings: AnnouncementSettings
-): void {
+): Promise<void> {
+  // Pre-load images asynchronously (handles base64 DataURLs as well as Supabase Storage CDN URLs)
+  const [logoKiriAsset, logoKananAsset, signatureAsset] = await Promise.all([
+    loadImageForPdf(settings.kopLogoKiri),
+    loadImageForPdf(settings.kopLogoKanan),
+    loadImageForPdf(settings.principalSignature),
+  ]);
+
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -70,12 +135,57 @@ export function generateGraduationCertificatePDF(
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const marginX = 20;
-  let cursorY = 18;
+  let cursorY = 17;
 
   // Outer institutional subtle frame
   doc.setDrawColor(203, 213, 225);
   doc.setLineWidth(0.3);
   doc.rect(12, 10, pageWidth - 24, 277);
+
+  // Logo sizes (default 30mm if not set, clamped between 20 and 40 mm)
+  const maxKiriSize = Math.min(40, Math.max(20, settings.kopLogoKiriSize || 30));
+  const maxKananSize = Math.min(40, Math.max(20, settings.kopLogoKananSize || 30));
+
+  let leftLogoBottomY = 13;
+  let rightLogoBottomY = 13;
+
+  // Draw Left Logo (Pemda / Dinas) with aspect-ratio contain
+  if (logoKiriAsset) {
+    try {
+      const aspect = logoKiriAsset.aspect || 1;
+      let drawW = maxKiriSize;
+      let drawH = drawW / aspect;
+      if (drawH > maxKiriSize) {
+        drawH = maxKiriSize;
+        drawW = drawH * aspect;
+      }
+      const posX = 15; // Left margin inside outer frame (12mm)
+      const posY = 13;
+      doc.addImage(logoKiriAsset.dataUrl, logoKiriAsset.format, posX, posY, drawW, drawH);
+      leftLogoBottomY = posY + drawH;
+    } catch {
+      // Graceful fallback
+    }
+  }
+
+  // Draw Right Logo (Sekolah / Tut Wuri Handayani) with aspect-ratio contain
+  if (logoKananAsset) {
+    try {
+      const aspect = logoKananAsset.aspect || 1;
+      let drawW = maxKananSize;
+      let drawH = drawW / aspect;
+      if (drawH > maxKananSize) {
+        drawH = maxKananSize;
+        drawW = drawH * aspect;
+      }
+      const posX = pageWidth - 15 - drawW; // Right margin 15mm
+      const posY = 13;
+      doc.addImage(logoKananAsset.dataUrl, logoKananAsset.format, posX, posY, drawW, drawH);
+      rightLogoBottomY = posY + drawH;
+    } catch {
+      // Graceful fallback
+    }
+  }
 
   // KOP SURAT (Letterhead)
   doc.setFont('helvetica', 'bold');
@@ -136,7 +246,10 @@ export function generateGraduationCertificatePDF(
   }
 
   // Horizontal line under Kop Surat based on kopBorderThickness
-  cursorY += 3.5;
+  // Ensure border line is placed below the lowest logo or text to prevent overlap
+  const maxLogoBottomY = Math.max(leftLogoBottomY, rightLogoBottomY);
+  cursorY = Math.max(cursorY + 3.5, maxLogoBottomY + 2.5);
+
   doc.setDrawColor(15, 23, 42);
   if (settings.kopBorderThickness === 'thick_double') {
     doc.setLineWidth(1.2);
@@ -369,22 +482,21 @@ export function generateGraduationCertificatePDF(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
   doc.setTextColor(15, 23, 42);
-  doc.text(`Ditetapkan di: ${legalPlace}`, signX, cursorY + 2);
-  doc.text(`Pada tanggal: ${settings.plenoDate}`, signX, cursorY + 6.5);
+  doc.text(`${legalPlace}, ${settings.plenoDate}`, signX, cursorY + 2);
   doc.setFont('helvetica', 'bold');
-  doc.text(`Kepala ${settings.schoolName},`, signX, cursorY + 11.5);
+  doc.text(`Kepala ${settings.schoolName},`, signX, cursorY + 7);
 
   // Optional Principal Signature Image
-  if (settings.principalSignature) {
+  if (signatureAsset) {
     try {
-      doc.addImage(settings.principalSignature, 'PNG', signX + 4, cursorY + 13, 45, 17);
+      doc.addImage(signatureAsset.dataUrl, signatureAsset.format, signX + 4, cursorY + 8.5, 45, 17);
     } catch {
       // Graceful fallback to blank space for physical signature
     }
   }
 
   // Name & NIP below signature
-  cursorY += 32;
+  cursorY += 28;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(9.5);
   doc.setTextColor(15, 23, 42);

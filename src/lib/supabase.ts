@@ -584,6 +584,24 @@ CREATE TABLE IF NOT EXISTS public.announcement_settings (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Pastikan seluruh kolom KOP Surat, Logo & Tanda Tangan tersedia pada announcement_settings
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_pemerintah TEXT DEFAULT '';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_dinas TEXT DEFAULT '';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_cabang_dinas TEXT DEFAULT '';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_kode_pos TEXT DEFAULT '';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_telepon TEXT DEFAULT '';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_email TEXT DEFAULT '';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_website TEXT DEFAULT '';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_logo_kiri TEXT DEFAULT '';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_logo_kanan TEXT DEFAULT '';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_logo_kiri_size INTEGER DEFAULT 30;
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_logo_kanan_size INTEGER DEFAULT 30;
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_border_thickness TEXT DEFAULT 'standard_double';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS skl_opening_text TEXT DEFAULT '';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS skl_closing_text TEXT DEFAULT '';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS skl_legal_location TEXT DEFAULT 'Ciamis';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS principal_signature TEXT DEFAULT '';
+
 -- Indexes untuk akselerasi pencarian NISN, Kelas, dan Filter Tahun Alumni
 CREATE INDEX IF NOT EXISTS idx_class_rooms_class_name ON public.class_rooms (class_name);
 CREATE INDEX IF NOT EXISTS idx_students_nisn ON public.students (nisn);
@@ -1851,6 +1869,8 @@ export const INITIAL_SETTINGS: AnnouncementSettings = {
   kopWebsite: 'https://sman1lumbung.sch.id',
   kopLogoKiri: '',
   kopLogoKanan: '',
+  kopLogoKiriSize: 30,
+  kopLogoKananSize: 30,
   kopBorderThickness: 'standard_double',
   sklOpeningText:
     'Kepala SMAN 1 Lumbung selaku Ketua Penyelenggara Ujian Satuan Pendidikan Tahun Pelajaran 2025/2026, berdasarkan Kriteria Kelulusan Peserta Didik dan hasil Rapat Pleno Dewan Pendidik pada tanggal 4 Mei 2026, dengan ini menerangkan bahwa:',
@@ -2302,6 +2322,8 @@ function mapRowToSettings(row: Record<string, any>): AnnouncementSettings {
     kopWebsite: String(row.kop_website ?? row.kopWebsite ?? INITIAL_SETTINGS.kopWebsite ?? ''),
     kopLogoKiri: String(row.kop_logo_kiri ?? row.kopLogoKiri ?? INITIAL_SETTINGS.kopLogoKiri ?? ''),
     kopLogoKanan: String(row.kop_logo_kanan ?? row.kopLogoKanan ?? INITIAL_SETTINGS.kopLogoKanan ?? ''),
+    kopLogoKiriSize: Number(row.kop_logo_kiri_size ?? row.kopLogoKiriSize ?? 30),
+    kopLogoKananSize: Number(row.kop_logo_kanan_size ?? row.kopLogoKananSize ?? 30),
     kopBorderThickness: (row.kop_border_thickness ??
       row.kopBorderThickness ??
       INITIAL_SETTINGS.kopBorderThickness ??
@@ -2444,6 +2466,22 @@ function mapSettingsToRow(settings: AnnouncementSettings) {
     is_published: settings.isPublished,
     announcement_time: settings.announcementTime,
     announcement_note: settings.announcementNote,
+    kop_pemerintah: settings.kopPemerintah ?? '',
+    kop_dinas: settings.kopDinas ?? '',
+    kop_cabang_dinas: settings.kopCabangDinas ?? '',
+    kop_kode_pos: settings.kopKodePos ?? '',
+    kop_telepon: settings.kopTelepon ?? '',
+    kop_email: settings.kopEmail ?? '',
+    kop_website: settings.kopWebsite ?? '',
+    kop_logo_kiri: settings.kopLogoKiri ?? '',
+    kop_logo_kanan: settings.kopLogoKanan ?? '',
+    kop_logo_kiri_size: settings.kopLogoKiriSize ?? 30,
+    kop_logo_kanan_size: settings.kopLogoKananSize ?? 30,
+    kop_border_thickness: settings.kopBorderThickness ?? 'standard_double',
+    skl_opening_text: settings.sklOpeningText ?? '',
+    skl_closing_text: settings.sklClosingText ?? '',
+    skl_legal_location: settings.sklLegalLocation ?? 'Ciamis',
+    principal_signature: settings.principalSignature ?? '',
     updated_at: settings.updatedAt,
   };
 }
@@ -4173,4 +4211,88 @@ export async function resolveLoginPanelImage(): Promise<{
     fromSupabaseStorage: false,
   };
 }
+
+// ============================================================================
+// BUCKET 'app-files' STORAGE UPLOADER & SQL SCHEMA SCRIPT
+// ============================================================================
+
+export const SUPABASE_APP_FILES_BUCKET_SQL = `-- ============================================================================
+-- SQL SCHEMA UNTUK BUCKET STORAGE 'app-files' (LOGO & TANDA TANGAN)
+-- Jalankan pada SQL Editor Supabase: https://supabase.com/dashboard/project/_/sql/new
+-- ============================================================================
+
+-- 1. Buat bucket 'app-files' secara publik
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('app-files', 'app-files', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+-- 2. Kebijakan RLS 1: Izin Baca Publik (SELECT) untuk logo & berkas
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'Public Read Access for app-files'
+  ) THEN
+    CREATE POLICY "Public Read Access for app-files"
+    ON storage.objects FOR SELECT
+    USING (bucket_id = 'app-files');
+  END IF;
+END $$;
+
+-- 3. Kebijakan RLS 2: Izin Unggah (INSERT) berkas ke bucket app-files
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'Allow Upload to app-files'
+  ) THEN
+    CREATE POLICY "Allow Upload to app-files"
+    ON storage.objects FOR INSERT
+    WITH CHECK (bucket_id = 'app-files');
+  END IF;
+END $$;
+
+-- 4. Kebijakan RLS 3: Izin Update & Delete pada bucket app-files
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'storage' AND tablename = 'objects' AND policyname = 'Allow Update and Delete on app-files'
+  ) THEN
+    CREATE POLICY "Allow Update and Delete on app-files"
+    ON storage.objects FOR ALL
+    USING (bucket_id = 'app-files');
+  END IF;
+END $$;`;
+
+export async function uploadFileToSupabaseStorage(
+  file: File,
+  folderName: 'logos' | 'signatures' | 'documents' = 'logos'
+): Promise<{ url: string | null; error?: string; fromSupabaseStorage: boolean }> {
+  try {
+    const db = getSupabaseClient();
+    const cleanExt = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const fileName = `${folderName}/${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${cleanExt}`;
+
+    const { data, error } = await db.storage
+      .from('app-files')
+      .upload(fileName, file, {
+        cacheControl: '3600',
+        upsert: true,
+      });
+
+    if (error) {
+      return { url: null, error: error.message, fromSupabaseStorage: false };
+    }
+
+    const { data: publicUrlData } = db.storage.from('app-files').getPublicUrl(fileName);
+    if (publicUrlData?.publicUrl) {
+      return { url: publicUrlData.publicUrl, fromSupabaseStorage: true };
+    }
+    return { url: null, error: 'Gagal mendapatkan URL publik dari Supabase Storage', fromSupabaseStorage: false };
+  } catch (err: any) {
+    return { url: null, error: err?.message || 'Gagal mengunggah berkas ke Supabase Storage', fromSupabaseStorage: false };
+  }
+}
+
 

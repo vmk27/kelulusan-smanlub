@@ -33,14 +33,17 @@ export const StudentResultCard: React.FC<StudentResultCardProps> = ({
 
   const isPass = student.status === 'LULUS';
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     setIsDownloading(true);
     setDownloadSuccess(false);
-    setTimeout(() => {
-      generateGraduationCertificatePDF(student, settings);
-      setIsDownloading(false);
+    try {
+      await generateGraduationCertificatePDF(student, settings);
       setDownloadSuccess(true);
-    }, 150);
+    } catch {
+      // Graceful handler
+    } finally {
+      setIsDownloading(false);
+    }
   };
 
   return (
@@ -377,13 +380,10 @@ export const StudentResultCard: React.FC<StudentResultCardProps> = ({
 
           {/* Principal Signature Box */}
           <div className="bg-palette-background border border-palette-accent rounded-xl p-4 sm:p-5 text-right w-full sm:w-72 shrink-0 space-y-1">
-            <p className="text-xs text-palette-text/80">
-              Ditetapkan di: <span className="font-semibold text-palette-text">{settings.sklLegalLocation || 'Ciamis'}</span>
+            <p className="text-xs text-palette-text/80 font-medium">
+              {settings.sklLegalLocation || 'Ciamis'}, <span className="font-mono tabular-nums">{settings.plenoDate}</span>
             </p>
-            <p className="text-xs text-palette-text/80">
-              Pada tanggal: <span className="font-mono font-medium text-palette-text">{settings.plenoDate}</span>
-            </p>
-            <p className="text-xs font-bold text-palette-text pt-1">
+            <p className="text-xs font-bold text-palette-text pt-0.5">
               Kepala {settings.schoolName},
             </p>
 

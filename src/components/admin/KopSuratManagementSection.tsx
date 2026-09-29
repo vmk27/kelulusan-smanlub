@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Building,
   Save,
@@ -8,6 +8,7 @@ import {
   Upload,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   HelpCircle,
   Sparkles,
   ExternalLink,
@@ -26,6 +27,7 @@ import {
 } from 'lucide-react';
 import { AnnouncementSettings, StudentRecord } from '../../types/graduation';
 import { generateGraduationCertificatePDF } from '../../utils/pdfGenerator';
+import { uploadFileToSupabaseStorage } from '../../lib/supabase';
 
 interface KopSuratManagementSectionProps {
   settings: AnnouncementSettings;
@@ -60,6 +62,28 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
     principalSignature: settings.principalSignature || '',
   });
 
+  useEffect(() => {
+    setFormData((prev) => ({
+      ...settings,
+      kopPemerintah: settings.kopPemerintah || prev.kopPemerintah || 'PEMERINTAH DAERAH PROVINSI JAWA BARAT',
+      kopDinas: settings.kopDinas || prev.kopDinas || 'DINAS PENDIDIKAN',
+      kopCabangDinas: settings.kopCabangDinas || prev.kopCabangDinas || 'CABANG DINAS PENDIDIKAN WILAYAH XIII',
+      kopKodePos: settings.kopKodePos || prev.kopKodePos || '46258',
+      kopTelepon: settings.kopTelepon || prev.kopTelepon || '(0265) 7578088',
+      kopEmail: settings.kopEmail || prev.kopEmail || 'sman1lumbung.ciamis@gmail.com',
+      kopWebsite: settings.kopWebsite || prev.kopWebsite || 'https://sman1lumbung.sch.id',
+      kopLogoKiri: settings.kopLogoKiri !== undefined ? settings.kopLogoKiri : (prev.kopLogoKiri ?? ''),
+      kopLogoKanan: settings.kopLogoKanan !== undefined ? settings.kopLogoKanan : (prev.kopLogoKanan ?? ''),
+      kopLogoKiriSize: settings.kopLogoKiriSize ?? prev.kopLogoKiriSize ?? 30,
+      kopLogoKananSize: settings.kopLogoKananSize ?? prev.kopLogoKananSize ?? 30,
+      kopBorderThickness: settings.kopBorderThickness || prev.kopBorderThickness || 'standard_double',
+      sklOpeningText: settings.sklOpeningText || prev.sklOpeningText || '',
+      sklClosingText: settings.sklClosingText || prev.sklClosingText || '',
+      sklLegalLocation: settings.sklLegalLocation || prev.sklLegalLocation || 'Ciamis',
+      principalSignature: settings.principalSignature !== undefined ? settings.principalSignature : (prev.principalSignature ?? ''),
+    }));
+  }, [settings]);
+
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [previewSampleStudent, setPreviewSampleStudent] = useState<StudentRecord | null>(
@@ -82,37 +106,88 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
     setSaveSuccess(false);
   };
 
-  const handleFileUpload = (
+  const [uploadingField, setUploadingField] = useState<
+    'kopLogoKiri' | 'kopLogoKanan' | 'principalSignature' | null
+  >(null);
+  const [uploadNotice, setUploadNotice] = useState<{
+    field: string;
+    message: string;
+    isSupabase: boolean;
+  } | null>(null);
+
+  const handleFileUpload = async (
     field: 'kopLogoKiri' | 'kopLogoKanan' | 'principalSignature',
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 2 * 1024 * 1024) {
-      alert('Ukuran berkas gambar terlalu besar (maksimum 2 MB). Silakan gunakan gambar yang lebih kecil.');
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Ukuran berkas gambar terlalu besar (maksimum 5 MB). Silakan gunakan berkas yang lebih kecil.');
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      if (result) {
-        handleChange(field, result);
-      }
-    };
-    reader.readAsDataURL(file);
+    setUploadingField(field);
+    setUploadNotice(null);
+
+    const folderName = field === 'principalSignature' ? 'signatures' : 'logos';
+    const storageResult = await uploadFileToSupabaseStorage(file, folderName);
+
+    if (storageResult.url && storageResult.fromSupabaseStorage) {
+      handleChange(field, storageResult.url);
+      setUploadNotice({
+        field,
+        message: 'Berkas berhasil diunggah dan disimpan ke Storage.',
+        isSupabase: true,
+      });
+    } else {
+      // Fallback to DataURL
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        if (result) {
+          handleChange(field, result);
+          setUploadNotice({
+            field,
+            message: storageResult.error
+              ? `Berkas disimpan secara lokal. (${storageResult.error}). Jalankan skema SQL bucket 'app-files' pada menu Supabase untuk penyimpanan cloud CDN.`
+              : 'Berkas disimpan secara lokal (DataURL).',
+            isSupabase: false,
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+
+    setUploadingField(null);
     e.target.value = '';
   };
 
   const handleClearField = (field: 'kopLogoKiri' | 'kopLogoKanan' | 'principalSignature') => {
-    handleChange(field, '');
+    const label =
+      field === 'kopLogoKiri'
+        ? 'Logo Kiri (Dinas/Pemda)'
+        : field === 'kopLogoKanan'
+          ? 'Logo Kanan (Sekolah)'
+          : 'Tanda Tangan Kepala Sekolah';
+    if (
+      window.confirm(
+        `Apakah Anda yakin ingin menghapus ${label}? Gambar yang tersimpan akan dihapus setelah Anda menekan tombol Simpan.`
+      )
+    ) {
+      handleChange(field, '');
+      setUploadNotice({
+        field,
+        message: `${label} telah dihapus dari formulir. Tekan "Simpan Semua Format KOP & SKL" untuk menerapkan perubahan.`,
+        isSupabase: false,
+      });
+    }
   };
 
   const handleResetDefault = () => {
     if (
       window.confirm(
-        'Kembalikan seluruh format KOP Surat dan redaksi kalimat SKL ke format baku resmi SMAN 1 Lumbung Provinsi Jawa Barat?'
+        'Kembalikan seluruh format KOP Surat dan redaksi kalimat SKL ke format baku resmi SMAN 1 Lumbung? (Gambar logo dan tanda tangan yang sudah tersimpan akan tetap dipertahankan).'
       )
     ) {
       setFormData((prev) => ({
@@ -128,15 +203,17 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
         kopTelepon: '(0265) 7578088',
         kopEmail: 'sman1lumbung.ciamis@gmail.com',
         kopWebsite: 'https://sman1lumbung.sch.id',
-        kopLogoKiri: '',
-        kopLogoKanan: '',
+        kopLogoKiri: prev.kopLogoKiri,
+        kopLogoKanan: prev.kopLogoKanan,
+        kopLogoKiriSize: prev.kopLogoKiriSize || 30,
+        kopLogoKananSize: prev.kopLogoKananSize || 30,
         kopBorderThickness: 'standard_double',
         sklOpeningText:
           'Kepala [NAMA_SEKOLAH] selaku Ketua Penyelenggara Ujian Satuan Pendidikan Tahun Pelajaran [TAHUN_AJARAN], berdasarkan Kriteria Kelulusan Peserta Didik dan hasil Rapat Pleno Dewan Pendidik pada tanggal [TANGGAL_PLENO], dengan ini menerangkan bahwa:',
         sklClosingText:
           'Surat Keterangan Lulus ini bersifat resmi dan berlaku sementara sampai dengan diterbitkannya Ijazah Asli Tahun Pelajaran [TAHUN_AJARAN].',
         sklLegalLocation: 'Ciamis',
-        principalSignature: '',
+        principalSignature: prev.principalSignature,
         updatedAt: new Date().toISOString(),
       }));
     }
@@ -156,7 +233,7 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
     }
   };
 
-  const handleTestPrintPdf = () => {
+  const handleTestPrintPdf = async () => {
     const dummyStudent: StudentRecord = previewSampleStudent || {
       id: 'preview-sample',
       nisn: '0081234567',
@@ -185,7 +262,7 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
       checkCount: 1,
       updatedAt: new Date().toISOString(),
     };
-    generateGraduationCertificatePDF(dummyStudent, formData);
+    await generateGraduationCertificatePDF(dummyStudent, formData);
   };
 
   const resolvedOpeningText = (formData.sklOpeningText || '')
@@ -439,10 +516,36 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
               <div className="flex items-center justify-between pb-2 border-b border-palette-accent">
                 <span className="text-xs font-bold uppercase tracking-wider text-palette-primary font-mono flex items-center gap-1.5">
                   <ImageIcon className="w-4 h-4" />
-                  3. Upload Logo Dinas & Logo Sekolah
+                  3. Upload Logo Dinas & Logo Sekolah (Supabase Storage Bucket app-files)
                 </span>
                 <span className="text-[11px] text-palette-text/60">Logo Resmi & Garis</span>
               </div>
+
+              {uploadNotice && (
+                <div
+                  className={`p-3 rounded-lg border text-xs flex items-center justify-between gap-2 ${
+                    uploadNotice.isSupabase
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                      : 'bg-amber-50 border-amber-200 text-amber-900'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    {uploadNotice.isSupabase ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+                    )}
+                    <span>{uploadNotice.message}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setUploadNotice(null)}
+                    className="text-[10px] font-semibold underline cursor-pointer"
+                  >
+                    Tutup
+                  </button>
+                </div>
+              )}
 
               {/* Hidden file inputs */}
               <input
@@ -496,10 +599,11 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
                         <button
                           type="button"
                           onClick={() => fileInputKiriRef.current?.click()}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-palette-primary hover:bg-palette-text rounded-md transition-colors cursor-pointer"
+                          disabled={uploadingField === 'kopLogoKiri'}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-palette-primary hover:bg-palette-text rounded-md transition-colors cursor-pointer disabled:opacity-50"
                         >
-                          <Upload className="w-3 h-3" />
-                          <span>Unggah Logo</span>
+                          <Upload className={`w-3 h-3 ${uploadingField === 'kopLogoKiri' ? 'animate-bounce' : ''}`} />
+                          <span>{uploadingField === 'kopLogoKiri' ? 'Mengunggah...' : 'Unggah Logo'}</span>
                         </button>
                         {formData.kopLogoKiri && (
                           <button
@@ -565,10 +669,11 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
                         <button
                           type="button"
                           onClick={() => fileInputKananRef.current?.click()}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-palette-primary hover:bg-palette-text rounded-md transition-colors cursor-pointer"
+                          disabled={uploadingField === 'kopLogoKanan'}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-palette-primary hover:bg-palette-text rounded-md transition-colors cursor-pointer disabled:opacity-50"
                         >
-                          <Upload className="w-3 h-3" />
-                          <span>Unggah Logo</span>
+                          <Upload className={`w-3 h-3 ${uploadingField === 'kopLogoKanan' ? 'animate-bounce' : ''}`} />
+                          <span>{uploadingField === 'kopLogoKanan' ? 'Mengunggah...' : 'Unggah Logo'}</span>
                         </button>
                         {formData.kopLogoKanan && (
                           <button
@@ -596,6 +701,81 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
                       placeholder="Atau tautan URL gambar (https://...)"
                       className="w-full px-2.5 py-1.5 text-[11px] border border-palette-accent rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-palette-primary text-palette-text"
                     />
+                  </div>
+                </div>
+              </div>
+
+              {/* Logo Print Size Settings (20-40 mm) */}
+              <div className="p-4 rounded-xl border border-palette-accent bg-palette-background space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-bold text-palette-text flex items-center gap-1.5">
+                    <Sliders className="w-3.5 h-3.5 text-palette-primary" />
+                    Ukuran Cetak Logo pada Dokumen PDF (Default 30 × 30 mm, Rentang 20–40 mm)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormData((prev) => ({
+                        ...prev,
+                        kopLogoKiriSize: 30,
+                        kopLogoKananSize: 30,
+                      }));
+                      setSaveSuccess(false);
+                    }}
+                    className="inline-flex items-center gap-1 text-[11px] text-palette-primary hover:underline font-semibold cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Reset Ukuran (30 mm)</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                  {/* Left Logo Size */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center text-xs">
+                      <label className="font-semibold text-palette-text">Ukuran Max Logo Kiri</label>
+                      <span className="font-mono font-bold text-palette-primary px-2 py-0.5 bg-white border border-palette-accent rounded text-[11px]">
+                        {formData.kopLogoKiriSize || 30} × {formData.kopLogoKiriSize || 30} mm
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={20}
+                      max={40}
+                      step={1}
+                      value={formData.kopLogoKiriSize || 30}
+                      onChange={(e) => handleChange('kopLogoKiriSize', Number(e.target.value))}
+                      className="w-full accent-palette-primary cursor-pointer"
+                    />
+                    <div className="flex justify-between text-[10px] text-palette-text/60 font-mono">
+                      <span>20 mm</span>
+                      <span>30 mm (Default)</span>
+                      <span>40 mm</span>
+                    </div>
+                  </div>
+
+                  {/* Right Logo Size */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between items-center text-xs">
+                      <label className="font-semibold text-palette-text">Ukuran Max Logo Kanan</label>
+                      <span className="font-mono font-bold text-palette-primary px-2 py-0.5 bg-white border border-palette-accent rounded text-[11px]">
+                        {formData.kopLogoKananSize || 30} × {formData.kopLogoKananSize || 30} mm
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={20}
+                      max={40}
+                      step={1}
+                      value={formData.kopLogoKananSize || 30}
+                      onChange={(e) => handleChange('kopLogoKananSize', Number(e.target.value))}
+                      className="w-full accent-palette-primary cursor-pointer"
+                    />
+                    <div className="flex justify-between text-[10px] text-palette-text/60 font-mono">
+                      <span>20 mm</span>
+                      <span>30 mm (Default)</span>
+                      <span>40 mm</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -855,10 +1035,11 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
                       <button
                         type="button"
                         onClick={() => fileInputTtdRef.current?.click()}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-palette-primary hover:bg-palette-text rounded-md transition-colors cursor-pointer"
+                        disabled={uploadingField === 'principalSignature'}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-palette-primary hover:bg-palette-text rounded-md transition-colors cursor-pointer disabled:opacity-50"
                       >
-                        <Upload className="w-3.5 h-3.5" />
-                        <span>Unggah Gambar TTD</span>
+                        <Upload className={`w-3.5 h-3.5 ${uploadingField === 'principalSignature' ? 'animate-bounce' : ''}`} />
+                        <span>{uploadingField === 'principalSignature' ? 'Mengunggah...' : 'Unggah Gambar TTD'}</span>
                       </button>
                       {formData.principalSignature && (
                         <button
@@ -925,7 +1106,13 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
                 {/* KOP SURAT HEADER */}
                 <div className="relative flex items-center justify-between gap-2.5 pt-0.5">
                   {/* Left Logo (Pemprov / Instansi) */}
-                  <div className="w-11 h-11 sm:w-13 sm:h-13 shrink-0 flex items-center justify-center">
+                  <div
+                    className="shrink-0 flex items-center justify-center transition-all duration-150"
+                    style={{
+                      width: `${Math.round(((formData.kopLogoKiriSize || 30) / 30) * 52)}px`,
+                      height: `${Math.round(((formData.kopLogoKiriSize || 30) / 30) * 52)}px`,
+                    }}
+                  >
                     {formData.kopLogoKiri ? (
                       <img
                         src={formData.kopLogoKiri}
@@ -936,7 +1123,13 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
                         }}
                       />
                     ) : (
-                      <div className="w-11 h-11 rounded-full border border-slate-400 bg-amber-50 flex items-center justify-center p-1 text-center shadow-2xs">
+                      <div
+                        className="rounded-full border border-slate-400 bg-amber-50 flex items-center justify-center p-1 text-center shadow-2xs"
+                        style={{
+                          width: `${Math.round(((formData.kopLogoKiriSize || 30) / 30) * 44)}px`,
+                          height: `${Math.round(((formData.kopLogoKiriSize || 30) / 30) * 44)}px`,
+                        }}
+                      >
                         <span className="text-[7.5px] font-bold leading-none text-amber-900 font-mono">
                           JABAR
                         </span>
@@ -978,7 +1171,13 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
                   </div>
 
                   {/* Right Logo (Tut Wuri / Sekolah) */}
-                  <div className="w-11 h-11 sm:w-13 sm:h-13 shrink-0 flex items-center justify-center">
+                  <div
+                    className="shrink-0 flex items-center justify-center transition-all duration-150"
+                    style={{
+                      width: `${Math.round(((formData.kopLogoKananSize || 30) / 30) * 52)}px`,
+                      height: `${Math.round(((formData.kopLogoKananSize || 30) / 30) * 52)}px`,
+                    }}
+                  >
                     {formData.kopLogoKanan ? (
                       <img
                         src={formData.kopLogoKanan}
@@ -989,7 +1188,13 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
                         }}
                       />
                     ) : (
-                      <div className="w-11 h-11 rounded-full border border-slate-400 bg-sky-50 flex items-center justify-center p-1 text-center shadow-2xs">
+                      <div
+                        className="rounded-full border border-slate-400 bg-sky-50 flex items-center justify-center p-1 text-center shadow-2xs"
+                        style={{
+                          width: `${Math.round(((formData.kopLogoKananSize || 30) / 30) * 44)}px`,
+                          height: `${Math.round(((formData.kopLogoKananSize || 30) / 30) * 44)}px`,
+                        }}
+                      >
                         <span className="text-[7.5px] font-bold leading-none text-sky-900 font-mono">
                           SMAN 1
                         </span>
@@ -1050,9 +1255,8 @@ export const KopSuratManagementSection: React.FC<KopSuratManagementSectionProps>
                 {/* Signature Preview Block (Without QR code, with Principal signature image or clean space) */}
                 <div className="pt-2 flex justify-end text-[8px] text-slate-800">
                   <div className="text-center space-y-0.5 min-w-[140px]">
-                    <p>Ditetapkan di: {formData.sklLegalLocation || 'Ciamis'}</p>
-                    <p>Pada tanggal: {formData.plenoDate || '4 Mei 2026'}</p>
-                    <p className="font-bold">Kepala {formData.schoolName || 'SMAN 1 Lumbung'},</p>
+                    <p className="font-medium">{formData.sklLegalLocation || 'Ciamis'}, {formData.plenoDate || '4 Mei 2026'}</p>
+                    <p className="font-bold pt-0.5">Kepala {formData.schoolName || 'SMAN 1 Lumbung'},</p>
                     
                     {/* Render uploaded signature or clean space */}
                     <div className="h-10 flex items-center justify-center my-0.5">

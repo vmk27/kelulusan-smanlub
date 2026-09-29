@@ -141,6 +141,8 @@ export interface AnnouncementSettings {
   kopWebsite?: string;
   kopLogoKiri?: string;
   kopLogoKanan?: string;
+  kopLogoKiriSize?: number;
+  kopLogoKananSize?: number;
   kopBorderThickness?: 'standard_double' | 'thick_double' | 'single' | 'minimal';
   // SKL Document Text Configuration
   sklOpeningText?: string;

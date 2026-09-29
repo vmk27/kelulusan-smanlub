@@ -42,9 +42,11 @@ import {
   maskApiKey,
   restoreDatabaseBackupSnapshot,
   runFullSupabaseAudit,
+  SUPABASE_APP_FILES_BUCKET_SQL,
   SUPABASE_SQL_SETUP_SCRIPT,
   SUPABASE_USER_TABLE_SQL,
   testSupabaseEndpoint,
+  uploadFileToSupabaseStorage,
   updateSupabaseConnectionConfig,
   validateSupabaseEnvironment,
 } from '../../lib/supabase';
@@ -97,6 +99,44 @@ export const SupabaseStorageSection: React.FC<SupabaseStorageSectionProps> = ({
   const [isCheckingSchema, setIsCheckingSchema] = useState(false);
   const [isSyncingDb, setIsSyncingDb] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isTestingStorage, setIsTestingStorage] = useState(false);
+  const [storageTestResult, setStorageTestResult] = useState<{
+    ok: boolean;
+    message: string;
+  } | null>(null);
+
+  const handleTestStorageBucket = async () => {
+    setIsTestingStorage(true);
+    setStorageTestResult(null);
+    try {
+      // Create a tiny transparent SVG file to test bucket upload
+      const dummySvg = `<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#1E3A5F"/></svg>`;
+      const testFile = new File([dummySvg], `test_probe_${Date.now()}.svg`, {
+        type: 'image/svg+xml',
+      });
+      const res = await uploadFileToSupabaseStorage(testFile, 'logos');
+      if (res.url && res.fromSupabaseStorage) {
+        setStorageTestResult({
+          ok: true,
+          message: `Bucket 'app-files' aktif & terverifikasi! URL berkas uji: ${res.url}`,
+        });
+      } else {
+        setStorageTestResult({
+          ok: false,
+          message:
+            res.error ||
+            "Bucket 'app-files' belum dibuat di Supabase Storage atau RLS Policy belum diaktifkan.",
+        });
+      }
+    } catch (err: any) {
+      setStorageTestResult({
+        ok: false,
+        message: err?.message || "Gagal menguji unggahan ke bucket 'app-files'.",
+      });
+    } finally {
+      setIsTestingStorage(false);
+    }
+  };
 
   const [expandedTable, setExpandedTable] = useState<string | null>('students');
   const [selectedMigrationVer, setSelectedMigrationVer] = useState<string>('ALL');
@@ -633,6 +673,90 @@ export const SupabaseStorageSection: React.FC<SupabaseStorageSectionProps> = ({
         <div className="rounded-lg bg-slate-900 text-slate-100 p-4 overflow-x-auto max-h-64">
           <pre className="text-[11px] font-mono leading-relaxed whitespace-pre">
             {SUPABASE_USER_TABLE_SQL}
+          </pre>
+        </div>
+      </div>
+
+      {/* =====================================================================
+          SETTING SQL BUCKET STORAGE: UPLOAD LOGO & TANDA TANGAN (app-files)
+         ===================================================================== */}
+      <div className="bg-white border-2 border-palette-primary/35 rounded-xl p-6 space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-palette-accent">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Upload className="w-4 h-4 text-palette-primary" />
+              <h3 className="text-sm font-bold text-palette-text">
+                Setting Skema Bucket Storage: Upload Logo & Tanda Tangan (<code className="font-mono text-palette-primary">app-files</code>)
+              </h3>
+              <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-900 text-[11px] font-mono font-semibold">
+                BUCKET STORAGE
+              </span>
+            </div>
+            <p className="text-xs text-palette-text/75">
+              Skema SQL idempoten untuk membuat bucket <code className="font-mono">app-files</code> pada Supabase Storage beserta kebijakan RLS public read dan upload izin berkas logo &amp; TTD.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleTestStorageBucket}
+              disabled={isTestingStorage}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-palette-primary bg-palette-accent/50 border border-palette-accent rounded-lg hover:bg-palette-accent transition-colors cursor-pointer"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isTestingStorage ? 'animate-spin' : ''}`} />
+              <span>{isTestingStorage ? 'Menguji Storage...' : 'Uji Akses Bucket app-files'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleCopyText(SUPABASE_APP_FILES_BUCKET_SQL, 'sql-storage-bucket')}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-palette-primary rounded-lg hover:bg-palette-text transition-colors cursor-pointer"
+            >
+              {copiedId === 'sql-storage-bucket' ? (
+                <>
+                  <Check className="w-3.5 h-3.5" />
+                  <span>SQL Bucket Storage Tersalin!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy SQL Bucket Storage (app-files)</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {storageTestResult && (
+          <div
+            className={`p-3.5 rounded-lg border text-xs flex items-center justify-between gap-3 ${
+              storageTestResult.ok
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                : 'bg-amber-50 border-amber-200 text-amber-900'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {storageTestResult.ok ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+              )}
+              <span className="font-medium">{storageTestResult.message}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setStorageTestResult(null)}
+              className="text-[11px] underline cursor-pointer shrink-0 font-medium"
+            >
+              Tutup
+            </button>
+          </div>
+        )}
+
+        <div className="rounded-lg bg-slate-900 text-slate-100 p-4 overflow-x-auto max-h-64">
+          <pre className="text-[11px] font-mono leading-relaxed whitespace-pre">
+            {SUPABASE_APP_FILES_BUCKET_SQL}
           </pre>
         </div>
       </div>

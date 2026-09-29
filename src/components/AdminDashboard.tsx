@@ -58,6 +58,7 @@ import {
   computeAcademicSummary,
   formatLetterNumberFromTemplate,
   resolveLoginPanelImage,
+  uploadFileToSupabaseStorage,
 } from '../lib/supabase';
 import {
   formatIndonesianDate,
@@ -3433,20 +3434,28 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                               type="file"
                               accept="image/png,image/jpeg,image/webp"
                               className="hidden"
-                              onChange={(e) => {
+                              onChange={async (e) => {
                                 const file = e.target.files?.[0];
                                 if (!file) return;
-                                const reader = new FileReader();
-                                reader.onload = (ev) => {
-                                  const result = ev.target?.result as string;
-                                  if (result) {
-                                    setFormSettings((prev) => ({
-                                      ...prev,
-                                      principalSignature: result,
-                                    }));
-                                  }
-                                };
-                                reader.readAsDataURL(file);
+                                const res = await uploadFileToSupabaseStorage(file, 'signatures');
+                                if (res.url && res.fromSupabaseStorage) {
+                                  setFormSettings((prev) => ({
+                                    ...prev,
+                                    principalSignature: res.url!,
+                                  }));
+                                } else {
+                                  const reader = new FileReader();
+                                  reader.onload = (ev) => {
+                                    const result = ev.target?.result as string;
+                                    if (result) {
+                                      setFormSettings((prev) => ({
+                                        ...prev,
+                                        principalSignature: result,
+                                      }));
+                                    }
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
                                 e.target.value = '';
                               }}
                             />
