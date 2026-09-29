@@ -914,6 +914,73 @@ ON CONFLICT (code) DO UPDATE SET
   major_target = EXCLUDED.major_target,
   updated_at = now();`;
 
+export const SUPABASE_KOP_SURAT_TABLE_SQL = `-- ============================================================================
+-- SETTING SQL TABEL KONFIGURASI KOP SURAT, LOGO & SKL (public.announcement_settings)
+-- Menyimpan format teks KOP, Logo Kiri, Logo Kanan, Ukuran Logo, dan TTD Kepala Sekolah
+-- Salin (Copy) dan jalankan pada SQL Editor Supabase Anda
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS public.announcement_settings (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  school_name TEXT NOT NULL DEFAULT 'SMAN 1 Lumbung Ciamis',
+  school_npsn TEXT NOT NULL DEFAULT '20211502',
+  school_address TEXT NOT NULL DEFAULT 'Jl. Raya Kawali - Panjalu, Desa Lumbung, Kec. Lumbung, Kab. Ciamis, Jawa Barat 46258',
+  province_name TEXT NOT NULL DEFAULT 'Pemerintah Daerah Provinsi Jawa Barat · Dinas Pendidikan',
+  academic_year TEXT NOT NULL DEFAULT '2025/2026',
+  principal_name TEXT NOT NULL DEFAULT 'Dr. H. Hendra Wijaya, M.Pd.',
+  principal_nip TEXT NOT NULL DEFAULT '19720814 199803 1 004',
+  pleno_date TEXT NOT NULL DEFAULT '4 Mei 2026',
+  skl_prefix TEXT NOT NULL DEFAULT '421.3/SKL-SMAN1LBG/V/2026',
+  passing_grade_kkm NUMERIC(5,2) NOT NULL DEFAULT 75.00,
+  is_published BOOLEAN NOT NULL DEFAULT true,
+  announcement_time TEXT NOT NULL DEFAULT now(),
+  announcement_note TEXT NOT NULL DEFAULT 'Keputusan kelulusan ini bersifat resmi berdasarkan hasil Rapat Pleno Dewan Pendidik SMAN 1 Lumbung Ciamis.',
+  
+  -- KOLOM FORMAT KOP SURAT, LOGO & TANDA TANGAN
+  kop_pemerintah TEXT DEFAULT 'PEMERINTAH DAERAH PROVINSI JAWA BARAT',
+  kop_dinas TEXT DEFAULT 'DINAS PENDIDIKAN',
+  kop_cabang_dinas TEXT DEFAULT 'CABANG DINAS PENDIDIKAN WILAYAH XIII',
+  kop_kode_pos TEXT DEFAULT '46258',
+  kop_telepon TEXT DEFAULT '(0265) 7578088',
+  kop_email TEXT DEFAULT 'sman1lumbung.ciamis@gmail.com',
+  kop_website TEXT DEFAULT 'https://sman1lumbung.sch.id',
+  kop_logo_kiri TEXT DEFAULT '',
+  kop_logo_kanan TEXT DEFAULT '',
+  kop_logo_kiri_size INTEGER DEFAULT 30,
+  kop_logo_kanan_size INTEGER DEFAULT 30,
+  kop_border_thickness TEXT DEFAULT 'standard_double',
+  skl_opening_text TEXT DEFAULT 'Kepala SMAN 1 Lumbung selaku Ketua Penyelenggara Ujian Satuan Pendidikan Tahun Pelajaran 2025/2026, berdasarkan Kriteria Kelulusan Peserta Didik dan hasil Rapat Pleno Dewan Pendidik pada tanggal 4 Mei 2026, dengan ini menerangkan bahwa:',
+  skl_closing_text TEXT DEFAULT 'Surat Keterangan Lulus ini bersifat resmi dan berlaku sementara sampai dengan diterbitkannya Ijazah Asli Tahun Pelajaran 2025/2026.',
+  skl_legal_location TEXT DEFAULT 'Ciamis',
+  principal_signature TEXT DEFAULT '',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Penyesuaian skema otomatis jika tabel sudah dibuat sebelumnya (Add Column Idempotent)
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_pemerintah TEXT DEFAULT 'PEMERINTAH DAERAH PROVINSI JAWA BARAT';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_dinas TEXT DEFAULT 'DINAS PENDIDIKAN';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_cabang_dinas TEXT DEFAULT 'CABANG DINAS PENDIDIKAN WILAYAH XIII';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_kode_pos TEXT DEFAULT '46258';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_telepon TEXT DEFAULT '(0265) 7578088';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_email TEXT DEFAULT 'sman1lumbung.ciamis@gmail.com';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_website TEXT DEFAULT 'https://sman1lumbung.sch.id';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_logo_kiri TEXT DEFAULT '';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_logo_kanan TEXT DEFAULT '';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_logo_kiri_size INTEGER DEFAULT 30;
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_logo_kanan_size INTEGER DEFAULT 30;
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS kop_border_thickness TEXT DEFAULT 'standard_double';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS skl_opening_text TEXT DEFAULT '';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS skl_closing_text TEXT DEFAULT '';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS skl_legal_location TEXT DEFAULT 'Ciamis';
+ALTER TABLE public.announcement_settings ADD COLUMN IF NOT EXISTS principal_signature TEXT DEFAULT '';
+
+-- Aktifkan Row Level Security (RLS) & Kebijakan Akses
+ALTER TABLE public.announcement_settings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "announcement_settings_select_policy" ON public.announcement_settings;
+DROP POLICY IF EXISTS "announcement_settings_write_policy" ON public.announcement_settings;
+CREATE POLICY "announcement_settings_select_policy" ON public.announcement_settings FOR SELECT USING (true);
+CREATE POLICY "announcement_settings_write_policy" ON public.announcement_settings FOR ALL USING (true) WITH CHECK (true);`;
+
 export const SUPABASE_STORAGE_BUCKET_SQL = `-- ============================================================================
 -- SETTING SQL STORAGE BUCKET: IZIN BACA GAMBAR LOGIN PANEL (app-files)
 -- Mengizinkan aplikasi membaca file 'bg/bg_panel_login.jpg' pada bucket 'app-files'
@@ -1359,7 +1426,7 @@ export async function runFullSupabaseAudit(localCounts: {
       version: 'V004',
       name: 'V004__create_app_users_role_management.sql',
       description:
-        'Tabel Baru Manajemen User (public.app_users) untuk role Admin, Guru, dan Wali Kelas beserta RLS & Realtime.',
+        'Tabel Manajemen User (public.app_users) untuk role Admin, Guru, dan Wali Kelas beserta RLS & Realtime.',
       isDestructive: false,
       requiresManualSqlEditor: !tableResults.find((t) => t.tableName === 'app_users')?.existsInCloud,
       isIdempotent: true,
@@ -1367,6 +1434,32 @@ export async function runFullSupabaseAudit(localCounts: {
       appliedAt: appliedMigrationsMap['V004'] || null,
       checksum: 'sha256:v004-sipinter-app-users',
       sql: SUPABASE_USER_TABLE_SQL,
+    },
+    {
+      version: 'V005',
+      name: 'V005__announcement_settings_kop_surat_and_logo.sql',
+      description:
+        'Tabel Format KOP Surat, Logo Kiri, Logo Kanan, Ukuran Logo, dan TTD Kepala Sekolah (public.announcement_settings) beserta RLS.',
+      isDestructive: false,
+      requiresManualSqlEditor: !tableResults.find((t) => t.tableName === 'announcement_settings')?.existsInCloud,
+      isIdempotent: true,
+      status: tableResults.find((t) => t.tableName === 'announcement_settings')?.existsInCloud ? 'applied' : 'pending',
+      appliedAt: appliedMigrationsMap['V005'] || null,
+      checksum: 'sha256:v005-sipinter-kop-surat',
+      sql: SUPABASE_KOP_SURAT_TABLE_SQL,
+    },
+    {
+      version: 'V006',
+      name: 'V006__storage_bucket_app_files_permissions.sql',
+      description:
+        'Konfigurasi Storage Bucket app-files & Izin Akses Publik/Anonim untuk menyimpan berkas Logo, TTD, dan Gambar Panel Login.',
+      isDestructive: false,
+      requiresManualSqlEditor: false,
+      isIdempotent: true,
+      status: 'applied',
+      appliedAt: new Date().toISOString(),
+      checksum: 'sha256:v006-sipinter-storage-bucket',
+      sql: SUPABASE_STORAGE_BUCKET_SQL,
     },
   ];
 
@@ -3798,6 +3891,8 @@ export async function updateAnnouncementSettings(
     syncedToPostgres: !error,
   };
 }
+
+export const upsertAnnouncementSettings = updateAnnouncementSettings;
 
 export async function recordStudentCheckIn(
   student: StudentRecord,

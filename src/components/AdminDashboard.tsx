@@ -59,6 +59,7 @@ import {
   formatLetterNumberFromTemplate,
   resolveLoginPanelImage,
   uploadFileToSupabaseStorage,
+  upsertAnnouncementSettings,
 } from '../lib/supabase';
 import {
   formatIndonesianDate,
@@ -341,6 +342,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       isPublished: publishState,
     };
     setFormSettings(updated);
+    await upsertAnnouncementSettings(updated);
     await onSaveSettings(updated);
     setSettingsSavedBanner(
       publishState
@@ -910,9 +912,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     e.preventDefault();
     setIsSavingSettings(true);
     setSettingsSavedBanner('');
-    await onSaveSettings(formSettings);
-    setIsSavingSettings(false);
-    setSettingsSavedBanner('Pengaturan jadwal pengumuman dan parameter SKL berhasil disimpan.');
+    try {
+      await upsertAnnouncementSettings(formSettings);
+      await onSaveSettings(formSettings);
+      setSettingsSavedBanner(
+        'Pengaturan jadwal pengumuman, KOP Surat, logo, dan tanda tangan berhasil disimpan ke database Supabase.'
+      );
+    } catch (err: any) {
+      alert('Gagal menyimpan pengaturan: ' + (err?.message || 'Error tidak diketahui'));
+    } finally {
+      setIsSavingSettings(false);
+    }
   };
 
   const handleExportCSV = () => {

@@ -43,6 +43,7 @@ import {
   restoreDatabaseBackupSnapshot,
   runFullSupabaseAudit,
   SUPABASE_APP_FILES_BUCKET_SQL,
+  SUPABASE_KOP_SURAT_TABLE_SQL,
   SUPABASE_SQL_SETUP_SCRIPT,
   SUPABASE_USER_TABLE_SQL,
   testSupabaseEndpoint,
@@ -1219,25 +1220,106 @@ export const SupabaseStorageSection: React.FC<SupabaseStorageSectionProps> = ({
         </div>
 
         {/* SQL Code Viewer */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs">
-            <span className="font-semibold text-palette-text">
-              Pratinjau Script SQL Idempoten (
-              {selectedMigrationVer === 'ALL'
-                ? 'Gabungan V001 + V002 + V003'
-                : `Migrasi ${selectedMigrationVer}`}
-              )
+        <div className="space-y-2.5">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 text-xs">
+            <span className="font-bold text-palette-text flex items-center gap-1.5">
+              <Database className="w-4 h-4 text-palette-primary" />
+              Pratinjau Script SQL Idempoten:
+              <span className="text-palette-primary font-mono underline">
+                {selectedMigrationVer === 'KOP_SURAT'
+                  ? 'Tabel KOP Surat & Logo (public.announcement_settings)'
+                  : selectedMigrationVer === 'STORAGE_BUCKET'
+                    ? 'Storage Bucket app-files (Izin Gambar)'
+                    : selectedMigrationVer === 'APP_USERS'
+                      ? 'Tabel User & Role (public.app_users)'
+                      : selectedMigrationVer === 'ALL'
+                        ? 'Script SQL Lengkap Gabungan (V001 - V006)'
+                        : `Migrasi ${selectedMigrationVer}`}
+              </span>
             </span>
-            <span className="text-palette-text/65">
-              Tempelkan di Supabase SQL Editor lalu klik <strong>Run</strong>
-            </span>
+
+            <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px]">
+              <button
+                type="button"
+                onClick={() => setSelectedMigrationVer('KOP_SURAT')}
+                className={`px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${
+                  selectedMigrationVer === 'KOP_SURAT'
+                    ? 'bg-palette-primary text-white border-palette-primary font-bold shadow-2xs'
+                    : 'bg-white text-palette-text border-palette-accent hover:bg-palette-accent/40'
+                }`}
+              >
+                SQL KOP Surat & Logo
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedMigrationVer('STORAGE_BUCKET')}
+                className={`px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${
+                  selectedMigrationVer === 'STORAGE_BUCKET'
+                    ? 'bg-palette-primary text-white border-palette-primary font-bold shadow-2xs'
+                    : 'bg-white text-palette-text border-palette-accent hover:bg-palette-accent/40'
+                }`}
+              >
+                SQL Storage Bucket
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedMigrationVer('ALL')}
+                className={`px-2.5 py-1 rounded-md border transition-colors cursor-pointer ${
+                  selectedMigrationVer === 'ALL'
+                    ? 'bg-palette-primary text-white border-palette-primary font-bold shadow-2xs'
+                    : 'bg-white text-palette-text border-palette-accent hover:bg-palette-accent/40'
+                }`}
+              >
+                SQL Gabungan Lengkap
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetSql =
+                    selectedMigrationVer === 'KOP_SURAT'
+                      ? SUPABASE_KOP_SURAT_TABLE_SQL
+                      : selectedMigrationVer === 'STORAGE_BUCKET'
+                        ? SUPABASE_APP_FILES_BUCKET_SQL
+                        : selectedMigrationVer === 'APP_USERS'
+                          ? SUPABASE_USER_TABLE_SQL
+                          : selectedMigrationVer === 'ALL'
+                            ? SUPABASE_SQL_SETUP_SCRIPT
+                            : auditReport?.migrations.find((m) => m.version === selectedMigrationVer)?.sql ||
+                              SUPABASE_SQL_SETUP_SCRIPT;
+                  handleCopyText(targetSql, 'active_sql_script');
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-emerald-600 text-white font-bold hover:bg-emerald-700 transition-colors cursor-pointer shadow-2xs"
+              >
+                {copiedId === 'active_sql_script' ? (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Script Tersalin!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Salin Script SQL Ini</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
-          <pre className="p-4 bg-palette-text text-palette-accent rounded-lg text-xs font-mono overflow-x-auto leading-relaxed max-h-80">
-            {selectedMigrationVer === 'ALL'
-              ? SUPABASE_SQL_SETUP_SCRIPT
-              : auditReport?.migrations.find((m) => m.version === selectedMigrationVer)?.sql ||
-                SUPABASE_SQL_SETUP_SCRIPT}
+
+          <pre className="p-4 bg-palette-text text-palette-accent rounded-lg text-xs font-mono overflow-x-auto leading-relaxed max-h-96 shadow-inner border border-slate-700">
+            {selectedMigrationVer === 'KOP_SURAT'
+              ? SUPABASE_KOP_SURAT_TABLE_SQL
+              : selectedMigrationVer === 'STORAGE_BUCKET'
+                ? SUPABASE_APP_FILES_BUCKET_SQL
+                : selectedMigrationVer === 'APP_USERS'
+                  ? SUPABASE_USER_TABLE_SQL
+                  : selectedMigrationVer === 'ALL'
+                    ? SUPABASE_SQL_SETUP_SCRIPT
+                    : auditReport?.migrations.find((m) => m.version === selectedMigrationVer)?.sql ||
+                      SUPABASE_SQL_SETUP_SCRIPT}
           </pre>
+          <p className="text-[11px] text-palette-text/65 font-mono">
+            * Tempelkan (Paste) script SQL di atas ke dalam <strong>Supabase SQL Editor</strong> lalu klik tombol <strong>Run</strong> untuk memperbarui database cloud Anda.
+          </p>
         </div>
       </div>
 

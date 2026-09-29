@@ -482,7 +482,7 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
                           NIP: {u.nip || '-'}
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 font-mono text-xs font-semibold text-palette-primary">
+                      <td className="py-3.5 px-4 font-semibold text-palette-text">
                         @{u.username}
                       </td>
                       <td className="py-3.5 px-4">
