@@ -79,45 +79,83 @@ export function generateGraduationCertificatePDF(
 
   // KOP SURAT (Letterhead)
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(51, 65, 85);
+  doc.setFontSize(9.5);
+  doc.setTextColor(30, 41, 59);
   doc.text(
-    (settings.provinceName || 'PEMERINTAH PROVINSI · DINAS PENDIDIKAN').toUpperCase(),
-    pageWidth / 2,
-    cursorY,
-    { align: 'center' }
-  );
-
-  cursorY += 6;
-  doc.setFont('times', 'bold');
-  doc.setFontSize(15);
-  doc.setTextColor(15, 23, 42);
-  doc.text(settings.schoolName.toUpperCase(), pageWidth / 2, cursorY, { align: 'center' });
-
-  cursorY += 5;
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
-  doc.setTextColor(71, 85, 105);
-  doc.text(
-    `NPSN: ${settings.schoolNpsn}  |  Tahun Pelajaran: ${settings.academicYear}`,
+    (settings.kopPemerintah || settings.provinceName || 'PEMERINTAH DAERAH PROVINSI JAWA BARAT').toUpperCase(),
     pageWidth / 2,
     cursorY,
     { align: 'center' }
   );
 
   cursorY += 4.5;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.text(
+    (settings.kopDinas || 'DINAS PENDIDIKAN').toUpperCase(),
+    pageWidth / 2,
+    cursorY,
+    { align: 'center' }
+  );
+
+  if (settings.kopCabangDinas) {
+    cursorY += 4.2;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8.5);
+    doc.setTextColor(51, 65, 85);
+    doc.text(settings.kopCabangDinas.toUpperCase(), pageWidth / 2, cursorY, { align: 'center' });
+  }
+
+  cursorY += 5.5;
+  doc.setFont('times', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(15, 23, 42);
+  doc.text(settings.schoolName.toUpperCase(), pageWidth / 2, cursorY, { align: 'center' });
+
+  cursorY += 4.5;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(71, 85, 105);
+  doc.text(
+    `NPSN: ${settings.schoolNpsn}  |  Telp: ${settings.kopTelepon || '(0265) 7578088'}  |  Kode Pos: ${settings.kopKodePos || '46258'}`,
+    pageWidth / 2,
+    cursorY,
+    { align: 'center' }
+  );
+
+  cursorY += 4;
   doc.text(settings.schoolAddress, pageWidth / 2, cursorY, { align: 'center' });
 
-  // Double horizontal line under Kop Surat
-  cursorY += 4;
+  if (settings.kopEmail || settings.kopWebsite) {
+    cursorY += 3.8;
+    const contactParts = [];
+    if (settings.kopEmail) contactParts.push(`Email: ${settings.kopEmail}`);
+    if (settings.kopWebsite) contactParts.push(`Website: ${settings.kopWebsite}`);
+    doc.setFontSize(7.5);
+    doc.text(contactParts.join('  |  '), pageWidth / 2, cursorY, { align: 'center' });
+  }
+
+  // Horizontal line under Kop Surat based on kopBorderThickness
+  cursorY += 3.5;
   doc.setDrawColor(15, 23, 42);
-  doc.setLineWidth(0.8);
-  doc.line(marginX, cursorY, pageWidth - marginX, cursorY);
-  doc.setLineWidth(0.25);
-  doc.line(marginX, cursorY + 1.2, pageWidth - marginX, cursorY + 1.2);
+  if (settings.kopBorderThickness === 'thick_double') {
+    doc.setLineWidth(1.2);
+    doc.line(marginX, cursorY, pageWidth - marginX, cursorY);
+    doc.setLineWidth(0.3);
+    doc.line(marginX, cursorY + 1.2, pageWidth - marginX, cursorY + 1.2);
+  } else if (settings.kopBorderThickness === 'single') {
+    doc.setLineWidth(1.0);
+    doc.line(marginX, cursorY, pageWidth - marginX, cursorY);
+  } else {
+    // standard_double
+    doc.setLineWidth(0.8);
+    doc.line(marginX, cursorY, pageWidth - marginX, cursorY);
+    doc.setLineWidth(0.25);
+    doc.line(marginX, cursorY + 1.1, pageWidth - marginX, cursorY + 1.1);
+  }
 
   // TITLE
-  cursorY += 10;
+  cursorY += 9;
   doc.setFont('times', 'bold');
   doc.setFontSize(13.5);
   doc.setTextColor(15, 23, 42);

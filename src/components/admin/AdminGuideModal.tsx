@@ -13,7 +13,13 @@ import {
   KeyRound,
 } from 'lucide-react';
 
-export type GuideTopicKey = 'classes' | 'students' | 'grades' | 'alumni' | 'settings_supabase';
+export type GuideTopicKey =
+  | 'classes'
+  | 'students'
+  | 'grades'
+  | 'letter_kop'
+  | 'alumni'
+  | 'settings_supabase';
 
 interface AdminGuideModalProps {
   isOpen: boolean;
@@ -53,14 +59,19 @@ export const AdminGuideModal: React.FC<AdminGuideModalProps> = ({
       icon: <FileSpreadsheet className="w-3.5 h-3.5" />,
     },
     {
+      key: 'letter_kop',
+      label: '4. Format KOP & Nomor Surat',
+      icon: <Settings className="w-3.5 h-3.5" />,
+    },
+    {
       key: 'alumni',
-      label: '4. Data Alumni',
+      label: '5. Data Alumni',
       icon: <GraduationCap className="w-3.5 h-3.5" />,
     },
     {
       key: 'settings_supabase',
-      label: '5. Manajemen User & Pengaturan',
-      icon: <Settings className="w-3.5 h-3.5" />,
+      label: '6. Manajemen User & Pengaturan',
+      icon: <Database className="w-3.5 h-3.5" />,
     },
   ];
 
@@ -121,7 +132,7 @@ export const AdminGuideModal: React.FC<AdminGuideModalProps> = ({
                 </h4>
                 <p className="text-palette-text/80 mt-1">
                   Menu ini berfungsi untuk mendaftarkan rombongan belajar (kelas XII), menentukan
-                  peminatan jurusan (MIPA/IPS), serta mencatat Wali Kelas yang bertanggung jawab.
+                  peminatan jurusan (MIPA/IPS/Bahasa), serta mencatat Wali Kelas yang bertanggung jawab.
                 </p>
               </div>
 
@@ -141,9 +152,10 @@ export const AdminGuideModal: React.FC<AdminGuideModalProps> = ({
                     </li>
                     <li>
                       <strong>2. Peminatan Jurusan (Wajib):</strong> Pilih{' '}
-                      <code className="font-mono">MIPA</code> atau{' '}
-                      <code className="font-mono">IPS</code>. Pilihan ini menentukan mata pelajaran
-                      peminatan siswa.
+                      <code className="font-mono">MIPA</code> (Matematika & IPA),{' '}
+                      <code className="font-mono">IPS</code> (Ilmu Sosial),{' '}
+                      <code className="font-mono">BHS</code> (Bahasa & Budaya), atau{' '}
+                      <code className="font-mono">UMM</code> (Umum / Semua Kelas / Lintas Minat). Pilihan ini menentukan mata pelajaran peminatan siswa.
                     </li>
                     <li>
                       <strong>3. Nama Lengkap Wali Kelas & Gelar (Wajib):</strong> Contoh:{' '}
@@ -337,6 +349,63 @@ export const AdminGuideModal: React.FC<AdminGuideModalProps> = ({
                       <code className="font-mono">PEM2</code>, lalu unggah kembali.
                     </li>
                   </ol>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTopic === 'letter_kop' && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-palette-accent/35 border border-palette-accent">
+                <h4 className="text-sm font-bold text-palette-text">
+                  Panduan Menu: 4. Pengaturan KOP Surat & Data Nomor Surat (SKL)
+                </h4>
+                <p className="text-palette-text/80 mt-1">
+                  Menu ini mengatur format kepala surat resmi (KOP Surat) serta klasifikasi kode penomoran otomatis Surat Keterangan Lulus (SKL) Digital yang diterbitkan sekolah.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 rounded-xl bg-palette-background border border-palette-accent space-y-3">
+                  <h5 className="font-bold text-palette-text flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-palette-primary" />
+                    <span>A. Sub-Menu 1: Format KOP Surat</span>
+                  </h5>
+                  <ul className="space-y-2 text-palette-text/85">
+                    <li>
+                      <strong>1. Hierarki Lembaga:</strong> Atur nama Pemerintah Daerah (Provinsi Jawa Barat), Dinas Pendidikan, Cabang Dinas (Wilayah XIII), serta Nama Resmi Sekolah.
+                    </li>
+                    <li>
+                      <strong>2. Alamat & Kontak:</strong> Isi alamat lengkap, nomor telepon resmi sekolah, kode pos, email resmi, dan alamat website sekolah.
+                    </li>
+                    <li>
+                      <strong>3. Logo & Garis Pembatas:</strong> Sesuaikan logo Pemprov Jawa Barat di sebelah kiri, logo sekolah di sebelah kanan, dan pilih model garis pembatas (Ganda Standar, Ganda Tebal, atau Tunggal).
+                    </li>
+                    <li>
+                      <strong>4. Live Preview:</strong> Periksa tampilan KOP secara langsung dan gunakan tombol <em>&ldquo;Test Unduh PDF&rdquo;</em> untuk melihat hasil cetak asli.
+                    </li>
+                  </ul>
+                </div>
+
+                <div className="p-4 rounded-xl bg-palette-background border border-palette-accent space-y-3">
+                  <h5 className="font-bold text-palette-text flex items-center gap-2">
+                    <ArrowRight className="w-4 h-4 text-palette-primary" />
+                    <span>B. Sub-Menu 2: Data Nomor Surat</span>
+                  </h5>
+                  <ul className="space-y-2 text-palette-text/85">
+                    <li>
+                      <strong>1. Kode Klasifikasi:</strong> Contoh kode klasifikasi surat dinas pendidikan seperti <code className="font-mono">421.3</code>.
+                    </li>
+                    <li>
+                      <strong>2. Pola Penomoran:</strong> Template penomoran otomatis seperti <code className="font-mono">421.3/[SEQ]/SKL-SMAN1LBG/V/2026</code>.
+                    </li>
+                    <li>
+                      <strong>3. Peminatan Target:</strong> Tentukan apakah pola penomoran berlaku untuk <code className="font-mono">SEMUA</code>, <code className="font-mono">MIPA</code>, <code className="font-mono">IPS</code>, <code className="font-mono">BHS</code>, atau <code className="font-mono">UMM</code>.
+                    </li>
+                    <li>
+                      <strong>4. Generate Massal:</strong> Gunakan tombol <em>&ldquo;Terapkan Penomoran ke Siswa&rdquo;</em> untuk mengenerate nomor SKL berurutan secara otomatis ke seluruh siswa.
+                    </li>
+                  </ul>
                 </div>
               </div>
             </div>

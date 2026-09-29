@@ -521,14 +521,16 @@ export const LetterNumberManagementSection: React.FC<LetterNumberManagementSecti
                     onChange={(e) =>
                       setEditingItem({
                         ...editingItem,
-                        majorTarget: e.target.value as 'SEMUA' | 'MIPA' | 'IPS',
+                        majorTarget: e.target.value as 'SEMUA' | 'MIPA' | 'IPS' | 'BHS' | 'UMM',
                       })
                     }
                     className="w-full px-3 py-2 text-xs bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
                   >
-                    <option value="SEMUA">Semua Jurusan (MIPA & IPS)</option>
+                    <option value="SEMUA">Semua Jurusan / Umum (MIPA, IPS, BHS)</option>
                     <option value="MIPA">Khusus Peminatan MIPA</option>
                     <option value="IPS">Khusus Peminatan IPS</option>
+                    <option value="BHS">Khusus Peminatan BHS (Bahasa & Budaya)</option>
+                    <option value="UMM">Khusus Kelas UMM (Umum / Lintas Minat)</option>
                   </select>
                 </div>
 

@@ -11,7 +11,8 @@
   :root {
     --font-display: 'Fraunces', Georgia, serif;
     --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+    --font-number: 'Kanit', sans-serif;
+    --font-mono: 'Kanit', sans-serif;
   }
 
   html,
@@ -28,8 +29,8 @@
     font-family: var(--font-display);
   }
 
-  .font-mono, .tabular-nums {
-    font-family: var(--font-mono);
+  .font-mono, .font-number, .tabular-nums {
+    font-family: var(--font-number);
     font-variant-numeric: tabular-nums;
   }
 

@@ -129,7 +129,7 @@ export const ClassManagementSection: React.FC<ClassManagementSectionProps> = ({
           </div>
           <p className="text-xs text-palette-text/70 mt-0.5">
             Kelola data kelas, peminatan jurusan, dan identitas Wali Kelas untuk Tahun Ajaran{' '}
-            {academicYear} (Tersinkronisasi otomatis ke Supabase)
+            {academicYear}
           </p>
         </div>
 
@@ -502,13 +502,15 @@ export const ClassManagementSection: React.FC<ClassManagementSectionProps> = ({
                     onChange={(e) =>
                       setEditingClass({
                         ...editingClass,
-                        major: e.target.value as 'MIPA' | 'IPS',
+                        major: e.target.value as any,
                       })
                     }
                     className="w-full px-3 py-2 text-xs bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
                   >
                     <option value="MIPA">MIPA (Matematika & Ilmu Alam)</option>
                     <option value="IPS">IPS (Ilmu Pengetahuan Sosial)</option>
+                    <option value="BHS">BHS (Bahasa & Budaya)</option>
+                    <option value="UMM">UMM (Umum / Semua Kelas / Lintas Minat)</option>
                   </select>
                 </div>
                 <div className="sm:col-span-2">

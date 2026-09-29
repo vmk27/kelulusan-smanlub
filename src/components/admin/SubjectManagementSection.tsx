@@ -33,7 +33,7 @@ export const SubjectManagementSection: React.FC<SubjectManagementSectionProps> =
   onDeleteSubject,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [majorFilter, setMajorFilter] = useState<'ALL' | 'UMUM' | 'MIPA' | 'IPS'>('ALL');
+  const [majorFilter, setMajorFilter] = useState<'ALL' | 'UMUM' | 'MIPA' | 'IPS' | 'BHS' | 'UMM'>('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
@@ -45,16 +45,19 @@ export const SubjectManagementSection: React.FC<SubjectManagementSectionProps> =
   const [showGuideBox, setShowGuideBox] = useState(false);
 
   const counts = useMemo(() => {
-    const umum = subjectCatalog.filter((s) => s.majorTarget === 'UMUM').length;
+    const umum = subjectCatalog.filter((s) => s.majorTarget === 'UMUM' || s.majorTarget === 'UMM').length;
     const mipa = subjectCatalog.filter((s) => s.majorTarget === 'MIPA').length;
     const ips = subjectCatalog.filter((s) => s.majorTarget === 'IPS').length;
+    const bhs = subjectCatalog.filter((s) => s.majorTarget === 'BHS').length;
     return {
       total: subjectCatalog.length,
       umum,
       mipa,
       ips,
+      bhs,
       totalForMipaStudent: umum + mipa,
       totalForIpsStudent: umum + ips,
+      totalForBhsStudent: umum + bhs,
     };
   }, [subjectCatalog]);
 
@@ -264,6 +267,7 @@ export const SubjectManagementSection: React.FC<SubjectManagementSectionProps> =
               { id: 'UMUM', label: `Wajib Umum (${counts.umum})` },
               { id: 'MIPA', label: `Peminatan MIPA (${counts.mipa})` },
               { id: 'IPS', label: `Peminatan IPS (${counts.ips})` },
+              { id: 'BHS', label: `Peminatan BHS (${counts.bhs})` },
             ] as const
           ).map((tab) => (
             <button
@@ -499,18 +503,20 @@ export const SubjectManagementSection: React.FC<SubjectManagementSectionProps> =
                   <select
                     value={editingSubject.majorTarget}
                     onChange={(e) => {
-                      const nextTarget = e.target.value as 'UMUM' | 'MIPA' | 'IPS';
+                      const nextTarget = e.target.value as 'UMUM' | 'MIPA' | 'IPS' | 'BHS' | 'UMM';
                       setEditingSubject({
                         ...editingSubject,
                         majorTarget: nextTarget,
-                        category: nextTarget === 'UMUM' ? 'Umum' : 'Peminatan',
+                        category: nextTarget === 'UMUM' || nextTarget === 'UMM' ? 'Umum' : 'Peminatan',
                       });
                     }}
                     className="w-full px-3 py-2 text-xs bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
                   >
-                    <option value="UMUM">Semua Jurusan (MIPA & IPS)</option>
+                    <option value="UMUM">Semua Jurusan / Umum (MIPA, IPS, BHS)</option>
                     <option value="MIPA">Khusus Peminatan MIPA</option>
                     <option value="IPS">Khusus Peminatan IPS</option>
+                    <option value="BHS">Khusus Peminatan BHS (Bahasa & Budaya)</option>
+                    <option value="UMM">Khusus Kelas UMM (Umum / Lintas Minat)</option>
                   </select>
                 </div>
 

@@ -13,6 +13,7 @@ import {
   AnnouncementSettings,
   ClassRoomRecord,
   GraduationStatus,
+  Major,
   StudentRecord,
 } from '../../types/graduation';
 import { computeAcademicSummary, getDefaultSubjects } from '../../lib/supabase';
@@ -321,10 +322,16 @@ export const CsvTemplateUploadModal: React.FC<CsvTemplateUploadModalProps> = ({
           }
 
           const existing = studentByNisn.get(nisn);
-          const major: 'MIPA' | 'IPS' =
-            majorRaw?.toUpperCase() === 'IPS' || className?.toUpperCase().includes('IPS')
+          const rawM = (majorRaw || existing?.major || '').trim().toUpperCase();
+          const rawClass = (className || existing?.className || '').trim().toUpperCase();
+          const major: Major =
+            rawM === 'IPS' || rawClass.includes('IPS')
               ? 'IPS'
-              : 'MIPA';
+              : rawM === 'BHS' || rawM === 'BAHASA' || rawClass.includes('BHS') || rawClass.includes('BAHASA')
+                ? 'BHS'
+                : rawM === 'UMM' || rawM === 'UMUM' || rawClass.includes('UMM') || rawClass.includes('UMUM')
+                  ? 'UMM'
+                  : 'MIPA';
 
           const subjects =
             existing?.subjects && existing.subjects.length > 0
@@ -388,12 +395,16 @@ export const CsvTemplateUploadModal: React.FC<CsvTemplateUploadModalProps> = ({
           }
 
           const existing = studentByNisn.get(nisn);
-          const major: 'MIPA' | 'IPS' =
-            majorRaw?.toUpperCase() === 'IPS' ||
-            existing?.major === 'IPS' ||
-            className?.toUpperCase().includes('IPS')
+          const rawM = (majorRaw || existing?.major || '').trim().toUpperCase();
+          const rawClass = (className || existing?.className || '').trim().toUpperCase();
+          const major: Major =
+            rawM === 'IPS' || rawClass.includes('IPS')
               ? 'IPS'
-              : 'MIPA';
+              : rawM === 'BHS' || rawM === 'BAHASA' || rawClass.includes('BHS') || rawClass.includes('BAHASA')
+                ? 'BHS'
+                : rawM === 'UMM' || rawM === 'UMUM' || rawClass.includes('UMM') || rawClass.includes('UMUM')
+                  ? 'UMM'
+                  : 'MIPA';
 
           const rawScores = [s1, s2, s3, s4, s5, s6, s7, s8].map((val) => {
             const num = Number(String(val || '0').replace(',', '.'));

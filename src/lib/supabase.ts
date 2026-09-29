@@ -11,6 +11,7 @@ import {
   GraduationPredicate,
   GraduationStatus,
   LetterNumberRecord,
+  Major,
   MigrationVersionItem,
   RlsPolicyAuditItem,
   StudentRecord,
@@ -1611,16 +1612,16 @@ export const INITIAL_LETTER_NUMBERS: LetterNumberRecord[] = [
 ];
 
 export function buildSubjectsFromCatalog(
-  majorOrCatalog: 'MIPA' | 'IPS' | SubjectCatalogRecord[],
-  catalogOrMajor: SubjectCatalogRecord[] | 'MIPA' | 'IPS',
+  majorOrCatalog: Major | SubjectCatalogRecord[],
+  catalogOrMajor: SubjectCatalogRecord[] | Major,
   existingSubjects?: Array<SubjectScore | number>,
   defaultKkm = 75
 ): SubjectScore[] {
-  const major: 'MIPA' | 'IPS' =
+  const major: Major =
     typeof majorOrCatalog === 'string'
-      ? majorOrCatalog
+      ? (majorOrCatalog as Major)
       : typeof catalogOrMajor === 'string'
-        ? catalogOrMajor
+        ? (catalogOrMajor as Major)
         : 'MIPA';
   const rawCatalog = Array.isArray(majorOrCatalog)
     ? majorOrCatalog
@@ -1631,7 +1632,13 @@ export function buildSubjectsFromCatalog(
   const sourceCatalog =
     Array.isArray(rawCatalog) && rawCatalog.length > 0 ? rawCatalog : INITIAL_SUBJECT_CATALOG;
   const relevant = sourceCatalog
-    .filter((item) => item.majorTarget === 'UMUM' || item.majorTarget === major)
+    .filter(
+      (item) =>
+        item.majorTarget === 'UMUM' ||
+        item.majorTarget === 'UMM' ||
+        item.majorTarget === major ||
+        major === 'UMM'
+    )
     .sort((a, b) => a.sortOrder - b.sortOrder || a.code.localeCompare(b.code));
 
   return relevant.map((catItem, idx) => {
@@ -1686,7 +1693,7 @@ export function formatLetterNumberFromTemplate(
 }
 
 export function getDefaultSubjects(
-  major: 'MIPA' | 'IPS',
+  major: Major,
   scores: number[],
   kkm = 75
 ): SubjectScore[] {
@@ -1712,7 +1719,33 @@ export function getDefaultSubjects(
     { code: 'GEO', name: 'Geografi', category: 'Peminatan', kkm },
   ];
 
-  const base = major === 'MIPA' ? mipaSubjects : ipsSubjects;
+  const bhsSubjects: Omit<SubjectScore, 'score'>[] = [
+    { code: 'PAI', name: 'Pendidikan Agama dan Budi Pekerti', category: 'Umum', kkm },
+    { code: 'PKN', name: 'Pendidikan Pancasila dan Kewarganegaraan', category: 'Umum', kkm },
+    { code: 'BIN', name: 'Bahasa Indonesia', category: 'Umum', kkm },
+    { code: 'MTK', name: 'Matematika', category: 'Umum', kkm },
+    { code: 'BIG', name: 'Bahasa Inggris', category: 'Umum', kkm },
+    { code: 'SAS', name: 'Bahasa & Sastra Indonesia', category: 'Peminatan', kkm },
+    { code: 'BAS', name: 'Bahasa & Sastra Inggris', category: 'Peminatan', kkm },
+    { code: 'ANT', name: 'Antropologi', category: 'Peminatan', kkm },
+  ];
+
+  const ummSubjects: Omit<SubjectScore, 'score'>[] = [
+    { code: 'PAI', name: 'Pendidikan Agama dan Budi Pekerti', category: 'Umum', kkm },
+    { code: 'PKN', name: 'Pendidikan Pancasila dan Kewarganegaraan', category: 'Umum', kkm },
+    { code: 'BIN', name: 'Bahasa Indonesia', category: 'Umum', kkm },
+    { code: 'MTK', name: 'Matematika', category: 'Umum', kkm },
+    { code: 'BIG', name: 'Bahasa Inggris', category: 'Umum', kkm },
+    { code: 'FIS', name: 'Fisika Dasar', category: 'Peminatan', kkm },
+    { code: 'EKO', name: 'Ekonomi Dasar', category: 'Peminatan', kkm },
+    { code: 'SAS', name: 'Bahasa & Sastra', category: 'Peminatan', kkm },
+  ];
+
+  let base = mipaSubjects;
+  if (major === 'IPS') base = ipsSubjects;
+  else if (major === 'BHS') base = bhsSubjects;
+  else if (major === 'UMM') base = ummSubjects;
+
   return base.map((subj, idx) => ({
     ...subj,
     score: scores[idx] ?? 80,
@@ -1809,6 +1842,16 @@ export const INITIAL_SETTINGS: AnnouncementSettings = {
   announcementTime: new Date(Date.now() + (2 * 3600 + 45 * 60 + 30) * 1000).toISOString(),
   announcementNote:
     'Keputusan kelulusan ini bersifat resmi berdasarkan hasil Rapat Pleno Dewan Pendidik SMAN 1 Lumbung Ciamis. Siswa yang dinyatakan lulus dapat mengunduh Surat Keterangan Lulus (SKL) Digital secara langsung.',
+  kopPemerintah: 'PEMERINTAH DAERAH PROVINSI JAWA BARAT',
+  kopDinas: 'DINAS PENDIDIKAN',
+  kopCabangDinas: 'CABANG DINAS PENDIDIKAN WILAYAH XIII',
+  kopKodePos: '46258',
+  kopTelepon: '(0265) 7578088',
+  kopEmail: 'sman1lumbung.ciamis@gmail.com',
+  kopWebsite: 'https://sman1lumbung.sch.id',
+  kopLogoKiri: '',
+  kopLogoKanan: '',
+  kopBorderThickness: 'standard_double',
   updatedAt: new Date().toISOString(),
 };
 
@@ -2064,10 +2107,19 @@ export const INITIAL_ALUMNI: AlumniRecord[] = [
 // ============================================================================
 
 function mapRowToClassRoom(row: Record<string, any>): ClassRoomRecord {
+  const rawMajor = String(row.major ?? 'MIPA').toUpperCase();
+  const major: Major =
+    rawMajor === 'IPS'
+      ? 'IPS'
+      : rawMajor === 'BHS'
+        ? 'BHS'
+        : rawMajor === 'UMM' || rawMajor === 'UMUM'
+          ? 'UMM'
+          : 'MIPA';
   return {
     id: String(row.id),
     className: String(row.class_name ?? row.className ?? ''),
-    major: (row.major === 'IPS' ? 'IPS' : 'MIPA') as 'MIPA' | 'IPS',
+    major,
     homeroomTeacher: String(row.homeroom_teacher ?? row.homeroomTeacher ?? ''),
     homeroomNip: String(row.homeroom_nip ?? row.homeroomNip ?? ''),
     roomNumber: String(row.room_number ?? row.roomNumber ?? ''),
@@ -2090,6 +2142,15 @@ function mapClassRoomToRow(cls: ClassRoomRecord) {
 }
 
 function mapRowToStudent(row: Record<string, any>): StudentRecord {
+  const rawMajor = String(row.major ?? 'MIPA').toUpperCase();
+  const major: Major =
+    rawMajor === 'IPS'
+      ? 'IPS'
+      : rawMajor === 'BHS'
+        ? 'BHS'
+        : rawMajor === 'UMM' || rawMajor === 'UMUM'
+          ? 'UMM'
+          : 'MIPA';
   return {
     id: String(row.id),
     nisn: String(row.nisn),
@@ -2098,7 +2159,7 @@ function mapRowToStudent(row: Record<string, any>): StudentRecord {
     birthPlace: String(row.birth_place ?? row.birthPlace ?? 'Jakarta'),
     birthDate: String(row.birth_date ?? row.birthDate ?? ''),
     className: String(row.class_name ?? row.className ?? 'XII MIPA 1'),
-    major: (row.major === 'IPS' ? 'IPS' : 'MIPA') as 'MIPA' | 'IPS',
+    major,
     averageScore: Number(row.average_score ?? row.averageScore ?? 0),
     status: (row.status === 'TIDAK LULUS' ? 'TIDAK LULUS' : 'LULUS') as GraduationStatus,
     predicate: (row.predicate ?? 'Memuaskan') as GraduationPredicate,
@@ -2134,6 +2195,15 @@ function mapStudentToRow(student: StudentRecord) {
 }
 
 function mapRowToAlumni(row: Record<string, any>): AlumniRecord {
+  const rawMajor = String(row.major ?? 'MIPA').toUpperCase();
+  const major: Major =
+    rawMajor === 'IPS'
+      ? 'IPS'
+      : rawMajor === 'BHS'
+        ? 'BHS'
+        : rawMajor === 'UMM' || rawMajor === 'UMUM'
+          ? 'UMM'
+          : 'MIPA';
   return {
     id: String(row.id),
     nisn: String(row.nisn),
@@ -2142,7 +2212,7 @@ function mapRowToAlumni(row: Record<string, any>): AlumniRecord {
     birthPlace: String(row.birth_place ?? row.birthPlace ?? 'Jakarta'),
     birthDate: String(row.birth_date ?? row.birthDate ?? ''),
     className: String(row.class_name ?? row.className ?? 'XII MIPA 1'),
-    major: (row.major === 'IPS' ? 'IPS' : 'MIPA') as 'MIPA' | 'IPS',
+    major,
     graduationYear: String(row.graduation_year ?? row.graduationYear ?? '2025/2026'),
     averageScore: Number(row.average_score ?? row.averageScore ?? 0),
     predicate: (row.predicate ?? 'Memuaskan') as GraduationPredicate,
@@ -2213,6 +2283,23 @@ function mapRowToSettings(row: Record<string, any>): AnnouncementSettings {
     announcementNote: String(
       row.announcement_note ?? row.announcementNote ?? INITIAL_SETTINGS.announcementNote
     ),
+    kopPemerintah: String(
+      row.kop_pemerintah ?? row.kopPemerintah ?? INITIAL_SETTINGS.kopPemerintah ?? ''
+    ),
+    kopDinas: String(row.kop_dinas ?? row.kopDinas ?? INITIAL_SETTINGS.kopDinas ?? ''),
+    kopCabangDinas: String(
+      row.kop_cabang_dinas ?? row.kopCabangDinas ?? INITIAL_SETTINGS.kopCabangDinas ?? ''
+    ),
+    kopKodePos: String(row.kop_kode_pos ?? row.kopKodePos ?? INITIAL_SETTINGS.kopKodePos ?? ''),
+    kopTelepon: String(row.kop_telepon ?? row.kopTelepon ?? INITIAL_SETTINGS.kopTelepon ?? ''),
+    kopEmail: String(row.kop_email ?? row.kopEmail ?? INITIAL_SETTINGS.kopEmail ?? ''),
+    kopWebsite: String(row.kop_website ?? row.kopWebsite ?? INITIAL_SETTINGS.kopWebsite ?? ''),
+    kopLogoKiri: String(row.kop_logo_kiri ?? row.kopLogoKiri ?? INITIAL_SETTINGS.kopLogoKiri ?? ''),
+    kopLogoKanan: String(row.kop_logo_kanan ?? row.kopLogoKanan ?? INITIAL_SETTINGS.kopLogoKanan ?? ''),
+    kopBorderThickness: (row.kop_border_thickness ??
+      row.kopBorderThickness ??
+      INITIAL_SETTINGS.kopBorderThickness ??
+      'standard_double') as any,
     updatedAt: String(row.updated_at ?? row.updatedAt ?? new Date().toISOString()),
   };
 }
@@ -2251,12 +2338,16 @@ function mapAppUserToRow(user: AppUserRecord) {
 function mapRowToSubjectCatalog(row: Record<string, any>): SubjectCatalogRecord {
   const rawCat = String(row.category ?? 'Umum');
   const rawMajor = String(row.major_target ?? row.majorTarget ?? 'UMUM').toUpperCase();
+  const majorTarget =
+    rawMajor === 'MIPA' || rawMajor === 'IPS' || rawMajor === 'BHS' || rawMajor === 'UMM'
+      ? (rawMajor as 'MIPA' | 'IPS' | 'BHS' | 'UMM')
+      : 'UMUM';
   return {
     id: String(row.id),
     code: String(row.code ?? '').toUpperCase(),
     name: String(row.name ?? ''),
     category: rawCat === 'Peminatan' ? 'Peminatan' : 'Umum',
-    majorTarget: rawMajor === 'MIPA' || rawMajor === 'IPS' ? rawMajor : 'UMUM',
+    majorTarget,
     kkm: Number(row.kkm ?? 75),
     sortOrder: Number(row.sort_order ?? row.sortOrder ?? 1),
     updatedAt: String(row.updated_at ?? row.updatedAt ?? new Date().toISOString()),
@@ -2278,6 +2369,10 @@ function mapSubjectCatalogToRow(subj: SubjectCatalogRecord) {
 
 function mapRowToLetterNumber(row: Record<string, any>): LetterNumberRecord {
   const rawTarget = String(row.major_target ?? row.majorTarget ?? 'SEMUA').toUpperCase();
+  const majorTarget =
+    rawTarget === 'MIPA' || rawTarget === 'IPS' || rawTarget === 'BHS' || rawTarget === 'UMM'
+      ? (rawTarget as 'MIPA' | 'IPS' | 'BHS' | 'UMM')
+      : 'SEMUA';
   return {
     id: String(row.id),
     code: String(row.code ?? ''),
@@ -2286,7 +2381,7 @@ function mapRowToLetterNumber(row: Record<string, any>): LetterNumberRecord {
     numberPattern: String(
       row.number_pattern ?? row.numberPattern ?? '421.3/{NO_URUT}/SKL-SMAN1LBG/V/2026'
     ),
-    majorTarget: rawTarget === 'MIPA' || rawTarget === 'IPS' ? rawTarget : 'SEMUA',
+    majorTarget,
     academicYear: String(row.academic_year ?? row.academicYear ?? '2025/2026'),
     issueDate: String(row.issue_date ?? row.issueDate ?? '2026-05-05'),
     startSequence: Number(row.start_sequence ?? row.startSequence ?? 1),

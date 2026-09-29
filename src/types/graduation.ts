@@ -1,3 +1,5 @@
+export type Major = 'MIPA' | 'IPS' | 'BHS' | 'UMM';
+
 export interface SubjectScore {
   code: string;
   name: string;
@@ -11,7 +13,7 @@ export interface SubjectCatalogRecord {
   code: string;
   name: string;
   category: 'Umum' | 'Peminatan';
-  majorTarget: 'UMUM' | 'MIPA' | 'IPS';
+  majorTarget: 'UMUM' | 'MIPA' | 'IPS' | 'BHS' | 'UMM';
   kkm: number;
   sortOrder: number;
   updatedAt: string;
@@ -23,7 +25,7 @@ export interface LetterNumberRecord {
   title: string;
   classificationCode: string;
   numberPattern: string;
-  majorTarget: 'SEMUA' | 'MIPA' | 'IPS';
+  majorTarget: 'SEMUA' | 'MIPA' | 'IPS' | 'BHS' | 'UMM';
   academicYear: string;
   issueDate: string;
   startSequence: number;
@@ -58,7 +60,7 @@ export interface AppUserRecord {
 export interface ClassRoomRecord {
   id: string;
   className: string;
-  major: 'MIPA' | 'IPS';
+  major: Major;
   homeroomTeacher: string;
   homeroomNip: string;
   roomNumber: string;
@@ -74,7 +76,7 @@ export interface StudentRecord {
   birthPlace: string;
   birthDate: string; // YYYY-MM-DD
   className: string;
-  major: 'MIPA' | 'IPS';
+  major: Major;
   averageScore: number;
   status: GraduationStatus;
   predicate: GraduationPredicate;
@@ -100,7 +102,7 @@ export interface AlumniRecord {
   birthPlace: string;
   birthDate: string;
   className: string;
-  major: 'MIPA' | 'IPS';
+  major: Major;
   graduationYear: string;
   averageScore: number;
   predicate: GraduationPredicate;
@@ -129,6 +131,17 @@ export interface AnnouncementSettings {
   isPublished: boolean;
   announcementTime: string; // ISO string
   announcementNote: string;
+  // Enhanced KOP Surat Configuration
+  kopPemerintah?: string;
+  kopDinas?: string;
+  kopCabangDinas?: string;
+  kopKodePos?: string;
+  kopTelepon?: string;
+  kopEmail?: string;
+  kopWebsite?: string;
+  kopLogoKiri?: string;
+  kopLogoKanan?: string;
+  kopBorderThickness?: 'standard_double' | 'thick_double' | 'single' | 'minimal';
   updatedAt: string;
 }
 

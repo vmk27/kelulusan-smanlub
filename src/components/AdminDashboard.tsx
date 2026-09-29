@@ -37,6 +37,9 @@ import {
   Sparkles,
   RefreshCw,
   Menu,
+  Filter,
+  AlertTriangle,
+  RotateCcw,
 } from 'lucide-react';
 import {
   AlumniRecord,
@@ -45,6 +48,7 @@ import {
   ClassRoomRecord,
   GraduationStatus,
   LetterNumberRecord,
+  Major,
   StudentRecord,
   SubjectCatalogRecord,
   SupabaseSyncStatus,
@@ -62,6 +66,7 @@ import {
 import { ClassManagementSection } from './admin/ClassManagementSection';
 import { SubjectManagementSection } from './admin/SubjectManagementSection';
 import { LetterNumberManagementSection } from './admin/LetterNumberManagementSection';
+import { KopSuratManagementSection } from './admin/KopSuratManagementSection';
 import { AlumniManagementSection } from './admin/AlumniManagementSection';
 import { SupabaseStorageSection } from './admin/SupabaseStorageSection';
 import { AdminAnalyticsSection } from './admin/AdminAnalyticsSection';
@@ -109,12 +114,14 @@ interface AdminDashboardProps {
 type AdminTab =
   | 'analytics'
   | 'students'
+  | 'letter_settings'
   | 'letter_numbers'
   | 'alumni'
   | 'users'
   | 'monitoring'
   | 'database';
 type StudentSubTab = 'classes' | 'subjects' | 'student_biodata' | 'student_grades';
+type LetterSubTab = 'kop_format' | 'letter_numbers';
 type FilterMode = 'ALL' | 'LULUS' | 'TIDAK_LULUS' | 'MIPA' | 'IPS' | 'CHECKED';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
@@ -195,9 +202,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const [activeTab, setActiveTab] = useState<AdminTab>('students');
   const [studentSubTab, setStudentSubTab] = useState<StudentSubTab>('student_biodata');
+  const [letterSubTab, setLetterSubTab] = useState<LetterSubTab>('kop_format');
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterMode, setFilterMode] = useState<FilterMode>('ALL');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<'ALL' | 'LULUS' | 'TIDAK LULUS'>('ALL');
   const [selectedClassFilter, setSelectedClassFilter] = useState<string>('ALL');
+  const [selectedMajorFilter, setSelectedMajorFilter] = useState<'ALL' | Major>('ALL');
 
   // Pagination state for Student Biodata & Student Grades tables
   const [studentPage, setStudentPage] = useState(1);
@@ -247,6 +256,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (studentSubTab === 'classes') setGuideTopic('classes');
       else if (studentSubTab === 'student_biodata') setGuideTopic('students');
       else setGuideTopic('grades');
+    } else if (activeTab === 'letter_settings' || activeTab === 'letter_numbers') {
+      setGuideTopic('letter_kop');
     } else if (activeTab === 'alumni') {
       setGuideTopic('alumni');
     } else if (activeTab === 'users' || activeTab === 'monitoring' || activeTab === 'database') {
@@ -348,6 +359,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     return { total, passed, failed, passRate, avgCohort, checkedCount };
   }, [students]);
 
+  const handleResetAllStudentFilters = () => {
+    setSearchQuery('');
+    setSelectedStatusFilter('ALL');
+    setSelectedClassFilter('ALL');
+    setSelectedMajorFilter('ALL');
+    setStudentPage(1);
+    setGradePage(1);
+  };
+
+  const isStudentFilterActive = Boolean(
+    searchQuery.trim() ||
+    selectedStatusFilter !== 'ALL' ||
+    selectedClassFilter !== 'ALL' ||
+    selectedMajorFilter !== 'ALL'
+  );
+
   const filteredStudents = useMemo(() => {
     return students.filter((s) => {
       const q = searchQuery.trim().toLowerCase();
@@ -359,15 +386,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         s.className.toLowerCase().includes(q);
 
       if (!matchesSearch) return false;
+      if (selectedStatusFilter !== 'ALL' && s.status !== selectedStatusFilter) return false;
       if (selectedClassFilter !== 'ALL' && s.className !== selectedClassFilter) return false;
-      if (filterMode === 'LULUS') return s.status === 'LULUS';
-      if (filterMode === 'TIDAK_LULUS') return s.status === 'TIDAK LULUS';
-      if (filterMode === 'MIPA') return s.major === 'MIPA';
-      if (filterMode === 'IPS') return s.major === 'IPS';
-      if (filterMode === 'CHECKED') return Boolean(s.checkedAt);
+      if (selectedMajorFilter !== 'ALL' && s.major !== selectedMajorFilter) return false;
       return true;
     });
-  }, [students, searchQuery, filterMode, selectedClassFilter]);
+  }, [students, searchQuery, selectedStatusFilter, selectedClassFilter, selectedMajorFilter]);
 
   const homeroomLookup = useMemo(() => {
     const map: Record<string, ClassRoomRecord> = {};
@@ -437,7 +461,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setLoginError('');
   };
 
-  const getDefaultLetterTemplateForMajor = (major: 'MIPA' | 'IPS'): LetterNumberRecord | null => {
+  const getDefaultLetterTemplateForMajor = (major: Major): LetterNumberRecord | null => {
     const activeForMajor = letterNumbers.find(
       (item) => item.isDefault && (item.majorTarget === major || item.majorTarget === 'SEMUA')
     );
@@ -497,8 +521,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         : classRooms[0];
 
     const defaultClass = preselectedClassObj?.className || 'XII MIPA 1';
-    const defaultMajor: 'MIPA' | 'IPS' =
-      preselectedClassObj?.major || (defaultClass.toUpperCase().includes('IPS') ? 'IPS' : 'MIPA');
+    const defaultMajor: Major =
+      preselectedClassObj?.major ||
+      (defaultClass.toUpperCase().includes('IPS')
+        ? 'IPS'
+        : defaultClass.toUpperCase().includes('BHS')
+          ? 'BHS'
+          : defaultClass.toUpperCase().includes('UMM')
+            ? 'UMM'
+            : 'MIPA');
 
     const defaultSubjects = buildSubjectsFromCatalog(
       subjectCatalog,
@@ -570,7 +601,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsModalOpen(true);
   };
 
-  const handleMajorChangeInModal = (major: 'MIPA' | 'IPS') => {
+  const handleMajorChangeInModal = (major: Major) => {
     if (!editingStudent) return;
     const updatedSubjects = buildSubjectsFromCatalog(
       subjectCatalog,
@@ -588,7 +619,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       currentClassObj && currentClassObj.major === major
         ? currentClassObj.className
         : classRooms.find((c) => c.major === major)?.className ||
-          (major === 'MIPA' ? 'XII MIPA 1' : 'XII IPS 1');
+          (major === 'MIPA'
+            ? 'XII MIPA 1'
+            : major === 'IPS'
+              ? 'XII IPS 1'
+              : major === 'BHS'
+                ? 'XII BHS 1'
+                : 'XII UMM 1');
     const letterTpl = getDefaultLetterTemplateForMajor(major);
     const existingIdx = students.findIndex((s) => s.id === editingStudent.id);
     const studentIdx = existingIdx >= 0 ? existingIdx + 1 : getNextStudentSequenceNumber();
@@ -793,13 +830,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           setSelectedClassFilter('ALL');
         }
         if (
-          (filterMode === 'LULUS' && finalizedStudent.status !== 'LULUS') ||
-          (filterMode === 'TIDAK_LULUS' && finalizedStudent.status !== 'TIDAK LULUS') ||
-          (filterMode === 'MIPA' && finalizedStudent.major !== 'MIPA') ||
-          (filterMode === 'IPS' && finalizedStudent.major !== 'IPS') ||
-          filterMode === 'CHECKED'
+          selectedStatusFilter !== 'ALL' &&
+          selectedStatusFilter !== finalizedStudent.status
         ) {
-          setFilterMode('ALL');
+          setSelectedStatusFilter('ALL');
+        }
+        if (
+          selectedMajorFilter !== 'ALL' &&
+          selectedMajorFilter !== finalizedStudent.major
+        ) {
+          setSelectedMajorFilter('ALL');
         }
         if (searchQuery.trim()) {
           setSearchQuery('');
@@ -1089,286 +1129,365 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </button>
           </div>
 
-          <nav className="space-y-1.5">
-            {/* Menu 0: Dashboard Analitik */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('analytics');
-                setIsMobileMenuOpen(false);
-              }}
-              className={`w-full flex items-center justify-between px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                activeTab === 'analytics'
-                  ? 'bg-palette-primary text-white'
-                  : 'text-palette-text hover:bg-palette-accent/40'
-              }`}
-            >
-              <span className="flex items-center gap-2.5">
-                <BarChart3 className="w-4 h-4 shrink-0" />
-                <span>Dashboard Analitik</span>
-              </span>
-              <span
-                className={`font-mono tabular-nums text-[11px] px-1.5 py-0.5 rounded ${
-                  activeTab === 'analytics'
-                    ? 'bg-white/20 text-white'
-                    : 'bg-palette-accent text-palette-text'
-                }`}
-              >
-                Live
-              </span>
-            </button>
+          <nav className="space-y-4 text-left">
+            {/* Section 1: Ringkasan & Analitik */}
+            <div className="space-y-1.5">
+              <div className="px-1.5 flex items-center justify-between">
+                <p className="text-[10px] font-bold text-palette-text/60 uppercase tracking-wider font-mono">
+                  Menu Utama · Analitik
+                </p>
+              </div>
 
-            {/* Menu 1: Data & Nilai Siswa + 4 Sub-menus */}
-            <div className="space-y-1">
+              {/* Menu 0: Dashboard Analitik */}
               <button
                 type="button"
-                onClick={() => setActiveTab('students')}
-                className={`w-full flex items-center justify-between px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                  activeTab === 'students'
-                    ? 'bg-palette-primary text-white'
+                onClick={() => {
+                  setActiveTab('analytics');
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold text-left transition-colors cursor-pointer ${
+                  activeTab === 'analytics'
+                    ? 'bg-palette-primary text-white shadow-xs'
                     : 'text-palette-text hover:bg-palette-accent/40'
                 }`}
               >
-                <span className="flex items-center gap-2.5">
-                  <Users className="w-4 h-4 shrink-0" />
-                  <span>Data & Nilai Siswa</span>
+                <span className="flex items-center gap-2.5 min-w-0 flex-1 text-left">
+                  <BarChart3 className="w-4 h-4 shrink-0" />
+                  <span className="truncate text-left">Dashboard Analitik</span>
                 </span>
-                <ChevronDown
-                  className={`w-3.5 h-3.5 transition-transform ${
-                    activeTab === 'students' ? 'rotate-0' : '-rotate-90'
+                <span
+                  className={`font-mono tabular-nums text-[11px] px-1.5 py-0.5 rounded shrink-0 ${
+                    activeTab === 'analytics'
+                      ? 'bg-white/20 text-white'
+                      : 'bg-palette-accent text-palette-text'
                   }`}
-                />
+                >
+                  Live
+                </span>
               </button>
-
-              {/* Sub-menu items under Data & Nilai Siswa */}
-              <div className="pl-4 ml-2 border-l-2 border-palette-accent space-y-1 py-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('students');
-                    setStudentSubTab('classes');
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-3 py-2 min-h-[38px] rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    activeTab === 'students' && studentSubTab === 'classes'
-                      ? 'bg-palette-accent text-palette-text font-semibold'
-                      : 'text-palette-text/75 hover:bg-palette-accent/35'
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <Building2 className="w-3.5 h-3.5 text-palette-primary shrink-0" />
-                    <span>Data Kelas & Wali Kelas</span>
-                  </span>
-                  <span className="font-mono tabular-nums text-[11px]">{classRooms.length}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('students');
-                    setStudentSubTab('subjects');
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-3 py-2 min-h-[38px] rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    activeTab === 'students' && studentSubTab === 'subjects'
-                      ? 'bg-palette-accent text-palette-text font-semibold'
-                      : 'text-palette-text/75 hover:bg-palette-accent/35'
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <BookOpen className="w-3.5 h-3.5 text-palette-primary shrink-0" />
-                    <span>Mata Pelajaran</span>
-                  </span>
-                  <span className="font-mono tabular-nums text-[11px]">
-                    {subjectCatalog.length}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('students');
-                    setStudentSubTab('student_biodata');
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-3 py-2 min-h-[38px] rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    activeTab === 'students' && studentSubTab === 'student_biodata'
-                      ? 'bg-palette-accent text-palette-text font-semibold'
-                      : 'text-palette-text/75 hover:bg-palette-accent/35'
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <Users className="w-3.5 h-3.5 text-palette-primary shrink-0" />
-                    <span>Data Siswa</span>
-                  </span>
-                  <span className="font-mono tabular-nums text-[11px]">{students.length}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab('students');
-                    setStudentSubTab('student_grades');
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-3 py-2 min-h-[38px] rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                    activeTab === 'students' && studentSubTab === 'student_grades'
-                      ? 'bg-palette-accent text-palette-text font-semibold'
-                      : 'text-palette-text/75 hover:bg-palette-accent/35'
-                  }`}
-                >
-                  <span className="flex items-center gap-2">
-                    <BookOpen className="w-3.5 h-3.5 text-palette-primary shrink-0" />
-                    <span>Data Nilai</span>
-                  </span>
-                  <span className="font-mono tabular-nums text-[11px]">
-                    {subjectCatalog.length} Mapel
-                  </span>
-                </button>
-              </div>
             </div>
 
-            {/* Menu: Data Nomor Surat (Terintegrasi ke Formulir Peserta Didik) */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('letter_numbers');
-                setIsMobileMenuOpen(false);
-              }}
-              className={`w-full flex items-center justify-between px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                activeTab === 'letter_numbers'
-                  ? 'bg-palette-primary text-white'
-                  : 'text-palette-text hover:bg-palette-accent/40'
-              }`}
-            >
-              <span className="flex items-center gap-2.5">
-                <FileText className="w-4 h-4 shrink-0" />
-                <span>Data Nomor Surat</span>
-              </span>
-              <span
-                className={`font-mono tabular-nums text-[11px] px-1.5 py-0.5 rounded ${
-                  activeTab === 'letter_numbers'
-                    ? 'bg-white/20 text-white'
-                    : 'bg-palette-accent text-palette-text'
-                }`}
-              >
-                {letterNumbers.length}
-              </span>
-            </button>
+            {/* Section 2: Modul Akademik & Siswa */}
+            <div className="space-y-1.5 pt-1">
+              <div className="px-1.5 flex items-center justify-between">
+                <p className="text-[10px] font-bold text-palette-text/60 uppercase tracking-wider font-mono">
+                  Menu Modul Akademik
+                </p>
+              </div>
 
-            {/* Menu 2: Data Alumni */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('alumni');
-                setIsMobileMenuOpen(false);
-              }}
-              className={`w-full flex items-center justify-between px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                activeTab === 'alumni'
-                  ? 'bg-palette-primary text-white'
-                  : 'text-palette-text hover:bg-palette-accent/40'
-              }`}
-            >
-              <span className="flex items-center gap-2.5">
-                <GraduationCap className="w-4 h-4 shrink-0" />
-                <span>Data Alumni</span>
-              </span>
-              <span
-                className={`font-mono tabular-nums text-[11px] px-1.5 py-0.5 rounded ${
+              {/* Menu 1: Data & Nilai Siswa + 4 Sub-menus */}
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('students')}
+                  className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold text-left transition-colors cursor-pointer ${
+                    activeTab === 'students'
+                      ? 'bg-palette-primary text-white shadow-xs'
+                      : 'text-palette-text hover:bg-palette-accent/40'
+                  }`}
+                >
+                  <span className="flex items-center gap-2.5 min-w-0 flex-1 text-left">
+                    <Users className="w-4 h-4 shrink-0" />
+                    <span className="truncate text-left">Data & Nilai Siswa</span>
+                  </span>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 shrink-0 transition-transform ${
+                      activeTab === 'students' ? 'rotate-0' : '-rotate-90'
+                    }`}
+                  />
+                </button>
+
+                {/* Sub-menu items under Data & Nilai Siswa */}
+                <div className="pl-3.5 ml-2 border-l-2 border-palette-accent space-y-1 py-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('students');
+                      setStudentSubTab('classes');
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-2 min-h-[38px] rounded-lg text-xs font-medium text-left transition-colors cursor-pointer ${
+                      activeTab === 'students' && studentSubTab === 'classes'
+                        ? 'bg-palette-accent text-palette-text font-semibold'
+                        : 'text-palette-text/75 hover:bg-palette-accent/35'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 min-w-0 flex-1 text-left">
+                      <Building2 className="w-3.5 h-3.5 text-palette-primary shrink-0" />
+                      <span className="truncate text-left">Data Kelas & Wali Kelas</span>
+                    </span>
+                    <span className="font-mono tabular-nums text-[11px] shrink-0">
+                      {classRooms.length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('students');
+                      setStudentSubTab('subjects');
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-2 min-h-[38px] rounded-lg text-xs font-medium text-left transition-colors cursor-pointer ${
+                      activeTab === 'students' && studentSubTab === 'subjects'
+                        ? 'bg-palette-accent text-palette-text font-semibold'
+                        : 'text-palette-text/75 hover:bg-palette-accent/35'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 min-w-0 flex-1 text-left">
+                      <BookOpen className="w-3.5 h-3.5 text-palette-primary shrink-0" />
+                      <span className="truncate text-left">Mata Pelajaran</span>
+                    </span>
+                    <span className="font-mono tabular-nums text-[11px] shrink-0">
+                      {subjectCatalog.length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('students');
+                      setStudentSubTab('student_biodata');
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-2 min-h-[38px] rounded-lg text-xs font-medium text-left transition-colors cursor-pointer ${
+                      activeTab === 'students' && studentSubTab === 'student_biodata'
+                        ? 'bg-palette-accent text-palette-text font-semibold'
+                        : 'text-palette-text/75 hover:bg-palette-accent/35'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 min-w-0 flex-1 text-left">
+                      <Users className="w-3.5 h-3.5 text-palette-primary shrink-0" />
+                      <span className="truncate text-left">Data Siswa</span>
+                    </span>
+                    <span className="font-mono tabular-nums text-[11px] shrink-0">
+                      {students.length}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('students');
+                      setStudentSubTab('student_grades');
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-2 min-h-[38px] rounded-lg text-xs font-medium text-left transition-colors cursor-pointer ${
+                      activeTab === 'students' && studentSubTab === 'student_grades'
+                        ? 'bg-palette-accent text-palette-text font-semibold'
+                        : 'text-palette-text/75 hover:bg-palette-accent/35'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 min-w-0 flex-1 text-left">
+                      <BookOpen className="w-3.5 h-3.5 text-palette-primary shrink-0" />
+                      <span className="truncate text-left">Data Nilai</span>
+                    </span>
+                    <span className="font-mono tabular-nums text-[11px] shrink-0">
+                      {subjectCatalog.length} Mapel
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Menu 2: Pengaturan KOP & Surat + 2 Sub-menus */}
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('letter_settings');
+                  }}
+                  className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold text-left transition-colors cursor-pointer ${
+                    activeTab === 'letter_settings' || activeTab === 'letter_numbers'
+                      ? 'bg-palette-primary text-white shadow-xs'
+                      : 'text-palette-text hover:bg-palette-accent/40'
+                  }`}
+                >
+                  <span className="flex items-center gap-2.5 min-w-0 flex-1 text-left">
+                    <FileText className="w-4 h-4 shrink-0" />
+                    <span className="truncate text-left">Pengaturan KOP & Surat</span>
+                  </span>
+                  <ChevronDown
+                    className={`w-3.5 h-3.5 shrink-0 transition-transform ${
+                      activeTab === 'letter_settings' || activeTab === 'letter_numbers'
+                        ? 'rotate-0'
+                        : '-rotate-90'
+                    }`}
+                  />
+                </button>
+
+                {/* Sub-menu items under Pengaturan KOP & Surat */}
+                <div className="pl-3.5 ml-2 border-l-2 border-palette-accent space-y-1 py-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('letter_settings');
+                      setLetterSubTab('kop_format');
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-2 min-h-[38px] rounded-lg text-xs font-medium text-left transition-colors cursor-pointer ${
+                      (activeTab === 'letter_settings' || activeTab === 'letter_numbers') &&
+                      letterSubTab === 'kop_format'
+                        ? 'bg-palette-accent text-palette-text font-semibold'
+                        : 'text-palette-text/75 hover:bg-palette-accent/35'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 min-w-0 flex-1 text-left">
+                      <Building2 className="w-3.5 h-3.5 text-palette-primary shrink-0" />
+                      <span className="truncate text-left">Format KOP Surat</span>
+                    </span>
+                    <span className="text-[10px] font-mono font-medium text-palette-primary shrink-0">
+                      Resmi
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab('letter_settings');
+                      setLetterSubTab('letter_numbers');
+                      setIsMobileMenuOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-2 min-h-[38px] rounded-lg text-xs font-medium text-left transition-colors cursor-pointer ${
+                      (activeTab === 'letter_settings' || activeTab === 'letter_numbers') &&
+                      letterSubTab === 'letter_numbers'
+                        ? 'bg-palette-accent text-palette-text font-semibold'
+                        : 'text-palette-text/75 hover:bg-palette-accent/35'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2 min-w-0 flex-1 text-left">
+                      <FileText className="w-3.5 h-3.5 text-palette-primary shrink-0" />
+                      <span className="truncate text-left">Data Nomor Surat</span>
+                    </span>
+                    <span className="font-mono tabular-nums text-[11px] shrink-0">
+                      {letterNumbers.length}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Menu 3: Data Alumni */}
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('alumni');
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold text-left transition-colors cursor-pointer ${
                   activeTab === 'alumni'
-                    ? 'bg-white/20 text-white'
-                    : 'bg-palette-accent text-palette-text'
+                    ? 'bg-palette-primary text-white shadow-xs'
+                    : 'text-palette-text hover:bg-palette-accent/40'
                 }`}
               >
-                {alumni.length}
-              </span>
-            </button>
-
-            {/* Menu 3: Manajemen User (Admin, Guru, Wali Kelas) */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('users');
-                setIsMobileMenuOpen(false);
-              }}
-              className={`w-full flex items-center justify-between px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                activeTab === 'users'
-                  ? 'bg-palette-primary text-white'
-                  : 'text-palette-text hover:bg-palette-accent/40'
-              }`}
-            >
-              <span className="flex items-center gap-2.5">
-                <UserCog className="w-4 h-4 shrink-0" />
-                <span>Manajemen User</span>
-              </span>
-              <span
-                className={`font-mono tabular-nums text-[11px] px-1.5 py-0.5 rounded ${
-                  activeTab === 'users'
-                    ? 'bg-white/20 text-white'
-                    : 'bg-palette-accent text-palette-text'
-                }`}
-              >
-                {users.length}
-              </span>
-            </button>
-
-            {/* Menu 3: Status & Pengaturan */}
-            <button
-              type="button"
-              onClick={() => {
-                setActiveTab('monitoring');
-                setIsMobileMenuOpen(false);
-              }}
-              className={`w-full flex items-center justify-between px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                activeTab === 'monitoring'
-                  ? 'bg-palette-primary text-white'
-                  : 'text-palette-text hover:bg-palette-accent/40'
-              }`}
-            >
-              <span className="flex items-center gap-2.5">
-                <Settings className="w-4 h-4 shrink-0" />
-                <span>Status & Pengaturan</span>
-              </span>
-              <span
-                className={`text-[11px] font-mono ${
-                  activeTab === 'monitoring'
-                    ? 'text-white'
-                    : settings.isPublished
-                      ? 'text-emerald-700'
-                      : 'text-amber-700'
-                }`}
-              >
-                {settings.isPublished ? 'Aktif' : 'Tutup'}
-              </span>
-            </button>
-
-            {/* Menu 4: Penyimpanan Supabase (Protected by Token Notification VIRGA100791) */}
-            <button
-              type="button"
-              onClick={handleClickSupabaseMenu}
-              className={`w-full flex items-center justify-between px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                activeTab === 'database'
-                  ? 'bg-palette-primary text-white'
-                  : 'text-palette-text hover:bg-palette-accent/40'
-              }`}
-            >
-              <span className="flex items-center gap-2.5">
-                <Database className="w-4 h-4 shrink-0" />
-                <span>Penyimpanan Supabase</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5">
-                <KeyRound
-                  className={`w-3 h-3 ${
-                    activeTab === 'database' ? 'text-white/90' : 'text-palette-primary'
-                  }`}
-                />
+                <span className="flex items-center gap-2.5 min-w-0 flex-1 text-left">
+                  <GraduationCap className="w-4 h-4 shrink-0" />
+                  <span className="truncate text-left">Data Alumni</span>
+                </span>
                 <span
-                  className={`w-2 h-2 rounded-full ${
-                    syncStatus.connected ? 'bg-emerald-400' : 'bg-amber-400'
+                  className={`font-mono tabular-nums text-[11px] px-1.5 py-0.5 rounded shrink-0 ${
+                    activeTab === 'alumni'
+                      ? 'bg-white/20 text-white'
+                      : 'bg-palette-accent text-palette-text'
                   }`}
-                />
-              </span>
-            </button>
+                >
+                  {alumni.length}
+                </span>
+              </button>
+            </div>
+
+            {/* Section 3: Pengaturan & Sistem */}
+            <div className="space-y-1.5 pt-1">
+              <div className="px-1.5 flex items-center justify-between">
+                <p className="text-[10px] font-bold text-palette-text/60 uppercase tracking-wider font-mono">
+                  Menu Sistem & Konfigurasi
+                </p>
+              </div>
+
+              {/* Menu 3: Manajemen User */}
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('users');
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold text-left transition-colors cursor-pointer ${
+                  activeTab === 'users'
+                    ? 'bg-palette-primary text-white shadow-xs'
+                    : 'text-palette-text hover:bg-palette-accent/40'
+                }`}
+              >
+                <span className="flex items-center gap-2.5 min-w-0 flex-1 text-left">
+                  <UserCog className="w-4 h-4 shrink-0" />
+                  <span className="truncate text-left">Manajemen User</span>
+                </span>
+                <span
+                  className={`font-mono tabular-nums text-[11px] px-1.5 py-0.5 rounded shrink-0 ${
+                    activeTab === 'users'
+                      ? 'bg-white/20 text-white'
+                      : 'bg-palette-accent text-palette-text'
+                  }`}
+                >
+                  {users.length}
+                </span>
+              </button>
+
+              {/* Menu 3: Status & Pengaturan */}
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('monitoring');
+                  setIsMobileMenuOpen(false);
+                }}
+                className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold text-left transition-colors cursor-pointer ${
+                  activeTab === 'monitoring'
+                    ? 'bg-palette-primary text-white shadow-xs'
+                    : 'text-palette-text hover:bg-palette-accent/40'
+                }`}
+              >
+                <span className="flex items-center gap-2.5 min-w-0 flex-1 text-left">
+                  <Settings className="w-4 h-4 shrink-0" />
+                  <span className="truncate text-left">Status & Pengaturan</span>
+                </span>
+                <span
+                  className={`text-[11px] font-mono shrink-0 ${
+                    activeTab === 'monitoring'
+                      ? 'text-white'
+                      : settings.isPublished
+                        ? 'text-emerald-700'
+                        : 'text-amber-700'
+                  }`}
+                >
+                  {settings.isPublished ? 'Aktif' : 'Tutup'}
+                </span>
+              </button>
+
+              {/* Menu 4: Penyimpanan Supabase */}
+              <button
+                type="button"
+                onClick={handleClickSupabaseMenu}
+                className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold text-left transition-colors cursor-pointer ${
+                  activeTab === 'database'
+                    ? 'bg-palette-primary text-white shadow-xs'
+                    : 'text-palette-text hover:bg-palette-accent/40'
+                }`}
+              >
+                <span className="flex items-center gap-2.5 min-w-0 flex-1 text-left">
+                  <Database className="w-4 h-4 shrink-0" />
+                  <span className="truncate text-left">Penyimpanan Supabase</span>
+                </span>
+                <span className="inline-flex items-center gap-1.5 shrink-0">
+                  <KeyRound
+                    className={`w-3 h-3 ${
+                      activeTab === 'database' ? 'text-white/90' : 'text-palette-primary'
+                    }`}
+                  />
+                  <span
+                    className={`w-2 h-2 rounded-full ${
+                      syncStatus.connected ? 'bg-emerald-400' : 'bg-amber-400'
+                    }`}
+                  />
+                </span>
+              </button>
+            </div>
           </nav>
         </div>
 
@@ -1606,58 +1725,68 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {activeTab === 'students' && (
             <div className="space-y-5">
               {/* Sub-menu Switcher Bar */}
-              <div className="bg-white border border-palette-accent rounded-xl p-2 grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap items-stretch lg:items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setStudentSubTab('classes')}
-                  className={`inline-flex items-center justify-center lg:justify-start gap-2 px-3.5 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                    studentSubTab === 'classes'
-                      ? 'bg-palette-primary text-white'
-                      : 'text-palette-text hover:bg-palette-accent/50'
-                  }`}
-                >
-                  <Building2 className="w-3.5 h-3.5 shrink-0" />
-                  <span>1. Data Kelas & Wali Kelas ({classRooms.length})</span>
-                </button>
+              <div className="bg-white border border-palette-accent rounded-xl p-3 space-y-2 text-left">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[11px] font-bold text-palette-primary uppercase tracking-wider font-mono">
+                    Sub-Menu Data & Nilai Siswa
+                  </span>
+                  <span className="text-[11px] text-palette-text/60 font-medium">
+                    Pilih tampilan data:
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap items-stretch lg:items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setStudentSubTab('classes')}
+                    className={`inline-flex items-center justify-start gap-2 px-3.5 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold text-left transition-colors cursor-pointer ${
+                      studentSubTab === 'classes'
+                        ? 'bg-palette-primary text-white shadow-xs'
+                        : 'text-palette-text hover:bg-palette-accent/50'
+                    }`}
+                  >
+                    <Building2 className="w-3.5 h-3.5 shrink-0" />
+                    <span className="text-left">1. Data Kelas & Wali Kelas ({classRooms.length})</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => setStudentSubTab('subjects')}
-                  className={`inline-flex items-center justify-center lg:justify-start gap-2 px-3.5 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                    studentSubTab === 'subjects'
-                      ? 'bg-palette-primary text-white'
-                      : 'text-palette-text hover:bg-palette-accent/50'
-                  }`}
-                >
-                  <BookOpen className="w-3.5 h-3.5 shrink-0" />
-                  <span>2. Mata Pelajaran ({subjectCatalog.length})</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setStudentSubTab('subjects')}
+                    className={`inline-flex items-center justify-start gap-2 px-3.5 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold text-left transition-colors cursor-pointer ${
+                      studentSubTab === 'subjects'
+                        ? 'bg-palette-primary text-white shadow-xs'
+                        : 'text-palette-text hover:bg-palette-accent/50'
+                    }`}
+                  >
+                    <BookOpen className="w-3.5 h-3.5 shrink-0" />
+                    <span className="text-left">2. Mata Pelajaran ({subjectCatalog.length})</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => setStudentSubTab('student_biodata')}
-                  className={`inline-flex items-center justify-center lg:justify-start gap-2 px-3.5 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                    studentSubTab === 'student_biodata'
-                      ? 'bg-palette-primary text-white'
-                      : 'text-palette-text hover:bg-palette-accent/50'
-                  }`}
-                >
-                  <Users className="w-3.5 h-3.5 shrink-0" />
-                  <span>3. Data Siswa ({students.length})</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setStudentSubTab('student_biodata')}
+                    className={`inline-flex items-center justify-start gap-2 px-3.5 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold text-left transition-colors cursor-pointer ${
+                      studentSubTab === 'student_biodata'
+                        ? 'bg-palette-primary text-white shadow-xs'
+                        : 'text-palette-text hover:bg-palette-accent/50'
+                    }`}
+                  >
+                    <Users className="w-3.5 h-3.5 shrink-0" />
+                    <span className="text-left">3. Data Siswa ({students.length})</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => setStudentSubTab('student_grades')}
-                  className={`inline-flex items-center justify-center lg:justify-start gap-2 px-3.5 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                    studentSubTab === 'student_grades'
-                      ? 'bg-palette-primary text-white'
-                      : 'text-palette-text hover:bg-palette-accent/50'
-                  }`}
-                >
-                  <BookOpen className="w-3.5 h-3.5 shrink-0" />
-                  <span>4. Data Nilai & Kelulusan</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setStudentSubTab('student_grades')}
+                    className={`inline-flex items-center justify-start gap-2 px-3.5 py-2.5 min-h-[40px] rounded-lg text-xs font-semibold text-left transition-colors cursor-pointer ${
+                      studentSubTab === 'student_grades'
+                        ? 'bg-palette-primary text-white shadow-xs'
+                        : 'text-palette-text hover:bg-palette-accent/50'
+                    }`}
+                  >
+                    <BookOpen className="w-3.5 h-3.5 shrink-0" />
+                    <span className="text-left">4. Data Nilai & Kelulusan</span>
+                  </button>
+                </div>
               </div>
 
               {/* SUB-MENU 1: DATA KELAS & WALI KELAS */}
@@ -1689,58 +1818,199 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   />
                 ))}
 
-              {/* SHARED FILTER BAR FOR DATA SISWA & DATA NILAI */}
+              {/* ENHANCED SEARCH & FILTER BAR FOR DATA SISWA & DATA NILAI */}
               {(studentSubTab === 'student_biodata' || studentSubTab === 'student_grades') && (
-                <div className="bg-white border border-palette-accent rounded-xl p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
-                    <div className="relative flex-1 max-w-md">
-                      <Search className="w-4 h-4 text-palette-text/50 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <div className="bg-white border border-palette-accent rounded-xl p-4 space-y-3.5 shadow-xs">
+                  {/* Top Row: Search by Name & Select Filters */}
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                    {/* Search by Name / NISN / No. Ujian */}
+                    <div className="md:col-span-5 relative">
+                      <label htmlFor="student-search-input" className="sr-only">
+                        Cari Nama Siswa
+                      </label>
+                      <Search className="w-4 h-4 text-palette-text/50 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                       <input
+                        id="student-search-input"
                         type="text"
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        placeholder="Cari nama siswa, NISN, atau nomor ujian..."
-                        className="w-full pl-9 pr-4 py-2 text-xs bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
+                          setStudentPage(1);
+                          setGradePage(1);
+                        }}
+                        placeholder="Cari berdasarkan nama siswa, NISN, atau no ujian..."
+                        className="w-full pl-9.5 pr-8 py-2.5 min-h-[40px] text-xs sm:text-sm bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary font-medium text-palette-text"
                       />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSearchQuery('');
+                            setStudentPage(1);
+                            setGradePage(1);
+                          }}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-palette-text/60 hover:text-palette-text rounded-full hover:bg-palette-accent/50 cursor-pointer"
+                          aria-label="Hapus pencarian"
+                          title="Hapus pencarian"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
 
-                    <select
-                      value={selectedClassFilter}
-                      onChange={(e) => setSelectedClassFilter(e.target.value)}
-                      className="px-3 py-2 text-xs font-medium bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
-                    >
-                      <option value="ALL">Semua Kelas ({classRooms.length})</option>
-                      {classRooms.map((c) => (
-                        <option key={c.id} value={c.className}>
-                          {c.className} — {c.homeroomTeacher}
-                        </option>
-                      ))}
-                    </select>
+                    {/* Filter by Status (Dropdown) */}
+                    <div className="md:col-span-3">
+                      <div className="relative">
+                        <select
+                          id="status-filter-select"
+                          value={selectedStatusFilter}
+                          onChange={(e) => {
+                            setSelectedStatusFilter(e.target.value as 'ALL' | 'LULUS' | 'TIDAK LULUS');
+                            setStudentPage(1);
+                            setGradePage(1);
+                          }}
+                          aria-label="Filter Status Kelulusan"
+                          className="w-full px-3 py-2.5 min-h-[40px] text-xs sm:text-sm font-semibold bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text cursor-pointer"
+                        >
+                          <option value="ALL">Status: Semua ({students.length})</option>
+                          <option value="LULUS">Status: LULUS ({stats.passed})</option>
+                          <option value="TIDAK LULUS">Status: TIDAK LULUS ({stats.failed})</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Filter by Kelas (Dropdown) */}
+                    <div className="md:col-span-2">
+                      <select
+                        id="class-filter-select"
+                        value={selectedClassFilter}
+                        onChange={(e) => {
+                          setSelectedClassFilter(e.target.value);
+                          setStudentPage(1);
+                          setGradePage(1);
+                        }}
+                        aria-label="Filter Rombongan Belajar / Kelas"
+                        className="w-full px-3 py-2.5 min-h-[40px] text-xs sm:text-sm font-medium bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text cursor-pointer"
+                      >
+                        <option value="ALL">Kelas: Semua ({classRooms.length})</option>
+                        {classRooms.map((c) => (
+                          <option key={c.id} value={c.className}>
+                            {c.className}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Filter by Jurusan / Peminatan */}
+                    <div className="md:col-span-2">
+                      <select
+                        id="major-filter-select"
+                        value={selectedMajorFilter}
+                        onChange={(e) => {
+                          setSelectedMajorFilter(e.target.value as 'ALL' | Major);
+                          setStudentPage(1);
+                          setGradePage(1);
+                        }}
+                        aria-label="Filter Jurusan Peminatan"
+                        className="w-full px-3 py-2.5 min-h-[40px] text-xs sm:text-sm font-medium bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text cursor-pointer"
+                      >
+                        <option value="ALL">Jurusan: Semua</option>
+                        <option value="MIPA">Jurusan: MIPA</option>
+                        <option value="IPS">Jurusan: IPS</option>
+                        <option value="BHS">Jurusan: BHS (Bahasa)</option>
+                        <option value="UMM">Jurusan: UMM (Umum)</option>
+                      </select>
+                    </div>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {(
-                      [
-                        { id: 'ALL', label: `Semua (${students.length})` },
-                        { id: 'LULUS', label: `Lulus (${stats.passed})` },
-                        { id: 'TIDAK_LULUS', label: `Tidak Lulus (${stats.failed})` },
-                        { id: 'MIPA', label: 'MIPA' },
-                        { id: 'IPS', label: 'IPS' },
-                      ] as { id: FilterMode; label: string }[]
-                    ).map((item) => (
+                  {/* Bottom Row: Quick Status Filter Pills & Active Filter Badges */}
+                  <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2.5 border-t border-palette-accent/70">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[11px] font-semibold text-palette-text/70 mr-1 flex items-center gap-1">
+                        <Filter className="w-3 h-3 text-palette-primary shrink-0" />
+                        <span>Filter Cepat:</span>
+                      </span>
+
+                      {/* Status Pills */}
                       <button
-                        key={item.id}
                         type="button"
-                        onClick={() => setFilterMode(item.id)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap cursor-pointer ${
-                          filterMode === item.id
-                            ? 'bg-palette-primary text-white'
+                        onClick={() => {
+                          setSelectedStatusFilter('ALL');
+                          setStudentPage(1);
+                          setGradePage(1);
+                        }}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 min-h-[30px] rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                          selectedStatusFilter === 'ALL'
+                            ? 'bg-palette-primary text-white shadow-xs'
                             : 'bg-palette-background text-palette-text/80 hover:bg-palette-accent/60'
                         }`}
                       >
-                        {item.label}
+                        <span>Semua Status</span>
+                        <span className="font-mono tabular-nums text-[10px] px-1 py-0.2 rounded bg-black/10">
+                          {students.length}
+                        </span>
                       </button>
-                    ))}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedStatusFilter('LULUS');
+                          setStudentPage(1);
+                          setGradePage(1);
+                        }}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 min-h-[30px] rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                          selectedStatusFilter === 'LULUS'
+                            ? 'bg-emerald-700 text-white shadow-xs'
+                            : 'bg-emerald-50 text-emerald-900 border border-emerald-200 hover:bg-emerald-100'
+                        }`}
+                      >
+                        <CheckCircle2 className="w-3 h-3 shrink-0" />
+                        <span>LULUS</span>
+                        <span className="font-mono tabular-nums text-[10px] px-1 py-0.2 rounded bg-black/10">
+                          {stats.passed}
+                        </span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedStatusFilter('TIDAK LULUS');
+                          setStudentPage(1);
+                          setGradePage(1);
+                        }}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 min-h-[30px] rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                          selectedStatusFilter === 'TIDAK LULUS'
+                            ? 'bg-rose-700 text-white shadow-xs'
+                            : 'bg-rose-50 text-rose-900 border border-rose-200 hover:bg-rose-100'
+                        }`}
+                      >
+                        <AlertTriangle className="w-3 h-3 shrink-0" />
+                        <span>TIDAK LULUS</span>
+                        <span className="font-mono tabular-nums text-[10px] px-1 py-0.2 rounded bg-black/10">
+                          {stats.failed}
+                        </span>
+                      </button>
+                    </div>
+
+                    {/* Result Match Count & Reset Button */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-palette-text/80">
+                        Menampilkan <strong className="font-mono text-palette-primary">{filteredStudents.length}</strong> dari{' '}
+                        <strong className="font-mono">{students.length}</strong> siswa
+                      </span>
+
+                      {isStudentFilterActive && (
+                        <button
+                          type="button"
+                          onClick={handleResetAllStudentFilters}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 min-h-[30px] text-xs font-semibold text-palette-text bg-palette-accent/60 border border-palette-accent rounded-lg hover:bg-palette-accent transition-colors cursor-pointer"
+                          title="Kembalikan semua filter ke awal"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Reset Filter</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -2602,19 +2872,102 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           )}
 
-          {/* TAB: DATA NOMOR SURAT (TERINTEGRASI KE FORMULIR PESERTA DIDIK) */}
-          {activeTab === 'letter_numbers' &&
-            (isFetchingTable ? (
-              <TableDataSkeleton rowCount={4} columnCount={6} showKpiCards />
-            ) : (
-              <LetterNumberManagementSection
-                letterNumbers={letterNumbers}
-                students={students}
-                onSaveLetterNumber={onSaveLetterNumber}
-                onDeleteLetterNumber={onDeleteLetterNumber}
-                onBulkUpdateStudents={onBulkSaveStudents}
-              />
-            ))}
+          {/* TAB: PENGATURAN KOP SURAT & DATA NOMOR SURAT (SUB-MENU SWITCHER + SECTIONS) */}
+          {(activeTab === 'letter_settings' || activeTab === 'letter_numbers') && (
+            <div className="space-y-4">
+              {/* Sub-menu Switcher Bar for KOP & Nomor Surat */}
+              <div className="bg-white border border-palette-accent rounded-xl p-3 sm:p-4 shadow-xs space-y-2.5">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[10px] font-bold text-palette-text/60 uppercase tracking-wider font-mono">
+                    SUB-MENU PENGATURAN KOP & SURAT
+                  </span>
+                  <span className="text-xs text-palette-primary font-semibold hidden sm:inline font-mono">
+                    {letterSubTab === 'kop_format'
+                      ? 'Format Baku Dokumen SKL Digital'
+                      : `${letterNumbers.length} Pola Penomoran Terdaftar`}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
+                  <button
+                    type="button"
+                    onClick={() => setLetterSubTab('kop_format')}
+                    className={`w-full flex items-center justify-start gap-2.5 px-3.5 py-2.5 min-h-[42px] rounded-lg text-xs font-semibold text-left transition-colors cursor-pointer ${
+                      letterSubTab === 'kop_format'
+                        ? 'bg-palette-primary text-white shadow-xs'
+                        : 'bg-palette-background text-palette-text hover:bg-palette-accent/40 border border-palette-accent'
+                    }`}
+                  >
+                    <Building2 className="w-4 h-4 shrink-0" />
+                    <div className="min-w-0 flex-1 text-left">
+                      <div className="truncate">1. Format & Desain KOP Surat</div>
+                      <div
+                        className={`text-[10px] font-normal ${
+                          letterSubTab === 'kop_format' ? 'text-white/80' : 'text-palette-text/60'
+                        }`}
+                      >
+                        Hierarki Dinas, Logo Kiri/Kanan, Kontak & Garis
+                      </div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setLetterSubTab('letter_numbers')}
+                    className={`w-full flex items-center justify-start gap-2.5 px-3.5 py-2.5 min-h-[42px] rounded-lg text-xs font-semibold text-left transition-colors cursor-pointer ${
+                      letterSubTab === 'letter_numbers'
+                        ? 'bg-palette-primary text-white shadow-xs'
+                        : 'bg-palette-background text-palette-text hover:bg-palette-accent/40 border border-palette-accent'
+                    }`}
+                  >
+                    <FileText className="w-4 h-4 shrink-0" />
+                    <div className="min-w-0 flex-1 text-left">
+                      <div className="truncate flex items-center justify-between">
+                        <span>2. Data Nomor Surat (SKL)</span>
+                        <span
+                          className={`font-mono tabular-nums text-[10px] px-1.5 py-0.5 rounded ${
+                            letterSubTab === 'letter_numbers'
+                              ? 'bg-white/20 text-white'
+                              : 'bg-palette-accent text-palette-text'
+                          }`}
+                        >
+                          {letterNumbers.length}
+                        </span>
+                      </div>
+                      <div
+                        className={`text-[10px] font-normal ${
+                          letterSubTab === 'letter_numbers'
+                            ? 'text-white/80'
+                            : 'text-palette-text/60'
+                        }`}
+                      >
+                        Pola Penomoran Otomatis & Klasifikasi
+                      </div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Sub-menu Section Rendering */}
+              {letterSubTab === 'kop_format' ? (
+                <KopSuratManagementSection
+                  settings={settings}
+                  students={students}
+                  onSaveSettings={onSaveSettings}
+                />
+              ) : isFetchingTable ? (
+                <TableDataSkeleton rowCount={4} columnCount={6} showKpiCards />
+              ) : (
+                <LetterNumberManagementSection
+                  letterNumbers={letterNumbers}
+                  students={students}
+                  onSaveLetterNumber={onSaveLetterNumber}
+                  onDeleteLetterNumber={onDeleteLetterNumber}
+                  onBulkUpdateStudents={onBulkSaveStudents}
+                />
+              )}
+            </div>
+          )}
 
           {/* TAB 2: DATA ALUMNI */}
           {activeTab === 'alumni' &&
@@ -3217,12 +3570,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <select
                         value={editingStudent.major}
                         onChange={(e) =>
-                          handleMajorChangeInModal(e.target.value as 'MIPA' | 'IPS')
+                          handleMajorChangeInModal(e.target.value as Major)
                         }
                         className="w-full px-3 py-2 min-h-[38px] text-xs bg-palette-background border border-palette-accent rounded-lg focus:outline-none focus:border-palette-primary text-palette-text"
                       >
                         <option value="MIPA">MIPA (Matematika & Ilmu Alam)</option>
                         <option value="IPS">IPS (Ilmu Pengetahuan Sosial)</option>
+                        <option value="BHS">BHS (Bahasa & Budaya)</option>
+                        <option value="UMM">UMM (Umum / Semua Kelas / Lintas Minat)</option>
                       </select>
                     </div>
 
